@@ -7,6 +7,8 @@ def rar_wrapper(pde, model, conf):
 
     def wrapper(*args, **kwargs):
         total_iter = kwargs['iterations']
+        # interval is number of iterations between dataset update
+        # count is number of points to add to dataset
         interval, count = conf['interval'], conf['count']
 
         assert total_iter % interval == 0
@@ -32,3 +34,4 @@ def rar_wrapper(pde, model, conf):
             train(*args, **kwargs, disregard_previous_best=True, save_model=False)
 
     return wrapper
+

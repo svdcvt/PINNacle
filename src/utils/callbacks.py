@@ -13,6 +13,65 @@ from src.utils import plot
 logger = logging.getLogger(__name__)
 
 
+class TestR3(Callback):
+    def __init__(self, method='R3', interval=1, verbose=True):
+        super().__init__()
+        self.method = method
+        self.interval = interval
+        self.valid_epoch = 0
+        self.log_every = 0
+        self.num_bcs_initial = None
+        self.num_domain_initial = None
+        self.verbose = verbose
+
+    def check(self):
+        # a = self.model.data.train_x_bc.shape[0] == sum(self.model.data.num_bcs)
+        b = (self.model.data.train_x_all.shape[0], self.model.data.num_domain, sum(self.model.data.num_bcs))
+        c = np.all(self.model.data.train_x == np.vstack([self.model.data.train_x_bc, self.model.data.train_x_all]))
+        #d = np.all(model.data.train_x_all[:self.num_boundary_initial] == model.data.train_x_bc)
+        if self.verbose:
+            print('shapes are right:', b)
+            print('train_x = [x_bc, x_all]:', c)
+
+        #assert b, f'broken shapes, {} and {}'
+        #print('train_x_all = [x_bc, x_pde]', d)
+
+    def resample(self):
+        X_res = self.model.data.train_x_all
+        pred_per_pde = self.model.predict(X_res, operator=self.model.pde.pde)
+        if isinstance(pred_per_pde, list):
+            pred_per_pde = np.hstack(pred_per_pde)
+        # TODO hotfix mean(-1) issue with several pdes (Burger2D)
+        residual_error = np.abs(pred_per_pde).mean(-1)
+        mean_res_err = np.mean(residual_error)
+
+        # we will not touch train_x_bc, as it is in R3 paper. But we will uniformly sample points of geometry (considering all points equal)
+        retained = X_res[residual_error > mean_res_err]
+        resample_count = X_res.shape[0] - retained.shape[0]
+        resampled = self.model.data.geom.random_points(resample_count, 'pseudo')
+        self.model.data.train_x_all = np.vstack([resampled, retained])
+        # this will update train_x and train_y, but no touching train_x_bc
+        self.model.data.resample_train_points(False, False)
+        if self.verbose:
+            print(f"Resample is done: {resample_count} points with res_loss <= {mean_res_err}")
+
+    def on_train_begin(self):
+        self.log_every = self.model.display_every
+        self.num_bcs_initial = self.model.data.num_bcs
+        self.num_domain_initial = self.model.data.num_domain
+        self.num_boundary_initial = sum(self.num_bcs_initial)
+        self.bcs_starts = [0] + np.cumsum(self.num_bcs_initial)
+        self.bcs_s_e = zip(self.bcs_starts[:-1], self.bcs_starts[1:])
+
+    def on_epoch_end(self):
+        self.valid_epoch += 1
+        if self.valid_epoch != 0 and self.valid_epoch % self.interval != 0:
+            return
+        # self.check()
+        self.resample()
+        # self.check()
+
+
 class PlotCallback(Callback):
 
     def __init__(self, log_every=None, verbose=False, fast=False):
