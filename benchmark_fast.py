@@ -18,19 +18,21 @@ from src.pde.poisson import Poisson2D_Classic, PoissonBoltzmann2D, Poisson3D_Com
 from src.pde.wave import Wave1D, Wave2D_Heterogeneous, Wave2D_LongTime
 from src.pde.inverse import PoissonInv, HeatInv
 from src.utils.args import parse_hidden_layers, parse_loss_weight
-from src.utils.callbacks import TesterCallback, PlotCallback, LossCallback, TestR3
+from src.utils.callbacks import TesterCallback, PlotCallback, LossCallback, PDEPointAdaptiveResampler
 from src.utils.rar import rar_wrapper
 
 # It is recommended not to modify this example file.
 # Please copy it as benchmark_xxx.py and make changes according to your own ideas.
 pde_list = \
-    [Burgers1D, Burgers2D] 
-    #[Poisson2D_Classic, PoissonBoltzmann2D, Poisson3D_ComplexGeometry, Poisson2D_ManyArea] + \
-    #[Heat2D_VaryingCoef, Heat2D_Multiscale, Heat2D_ComplexGeometry, Heat2D_LongTime] + \
-    #[NS2D_LidDriven, NS2D_BackStep, NS2D_LongTime] + \
-    #[Wave1D, Wave2D_Heterogeneous, Wave2D_LongTime] + \
-    #[KuramotoSivashinskyEquation, GrayScottEquation] + \
-    #[PoissonND, HeatND]
+    [Burgers1D, Burgers2D] + \
+    [Poisson2D_Classic, PoissonBoltzmann2D, Poisson3D_ComplexGeometry, Poisson2D_ManyArea] + \
+    [Heat2D_VaryingCoef, Heat2D_Multiscale, Heat2D_ComplexGeometry, Heat2D_LongTime] + \
+    [NS2D_LidDriven, NS2D_BackStep, NS2D_LongTime] + \
+    [Wave1D, Wave2D_Heterogeneous, Wave2D_LongTime] + \
+    [KuramotoSivashinskyEquation, GrayScottEquation] + \
+    [PoissonND, HeatND]
+
+pde_list = [Burgers1D]
 
 # pde_list += \
 #     [(Burgers2D, {"datapath": "ref/burgers2d_1.dat", "icpath": ("ref/burgers2d_init_u_1.dat", "ref/burgers2d_init_v_1.dat")})] + \
@@ -69,10 +71,9 @@ if __name__ == "__main__":
     parser.add_argument('--log-every', type=int, default=100)
     parser.add_argument('--plot-every', type=int, default=2000)
     parser.add_argument('--repeat', type=int, default=1)
-    parser.add_argument('--method', type=str, default="adam")
-    parser.add_argument('--resample-interval', type=int, default=1000)
-    parser.add_argument('--rar-count', type=int, default=1)
-
+    parser.add_argument('--method', choices=['gepinn', 'laaf', 'gaaf', 'multiadam', 'lra', 'ntk', 'lbfgs']) # default is None: FNN net adn Adam opt
+    parser.add_argument('--resample-method', choices=['rarg', 'rard', 'rad', 'r3', 'full']) # default is None: no resampling
+    parser.add_argument('--resample-period', type=int, default=1000)
     command_args = parser.parse_args()
 
     seed = command_args.seed
@@ -118,9 +119,6 @@ if __name__ == "__main__":
 
             model = pde.create_model(net)
             model.compile(opt, loss_weights=loss_weights)
-            if command_args.method == "rar":
-                model.train = rar_wrapper(pde, model, {"interval": command_args.resample_interval, "count": command_args.rar_count})
-            # the trainer calls model.train(**train_args)
             return model
 
         def get_model_others():
@@ -130,16 +128,33 @@ if __name__ == "__main__":
             # schedule the task using trainer.add_task(get_model_other, {training args})
             return model
 
+        callbacks = [
+                TesterCallback(log_every=command_args.log_every),
+                PlotCallback(log_every=command_args.plot_every, fast=True),
+                LossCallback(loss_plot=True, verbose=True)
+                ]
+
+        if command_args.resample_method is not None:
+            # TODO hotfix argparse/configparse...
+            resampler_params = {
+                    "method" : command_args.resample_method,
+                    "period" : command_args.resample_period,
+                    "density_mul" : 5,
+                    "m" : 1, # it depends on PDE
+                    "k" : 2.,
+                    "c" : 0.
+                    }
+            callbacks.append(
+                    PDEPointAdaptiveResampler(
+                        verbose=False,
+                        **resampler_params)
+                    )
+
         trainer.add_task(
             get_model_dde, {
                 "iterations": command_args.iter,
                 "display_every": command_args.log_every,
-                "callbacks": [
-                    TesterCallback(log_every=command_args.log_every),
-                    PlotCallback(log_every=command_args.plot_every, fast=True),
-                    LossCallback(verbose=True),
-                    TestR3(interval=1, verbose=False)
-                ]
+                "callbacks": callbacks 
             }
         )
 

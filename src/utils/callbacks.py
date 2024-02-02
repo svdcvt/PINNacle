@@ -6,67 +6,167 @@ import scipy
 import itertools
 
 from deepxde.geometry import Hypercube, Interval
-from deepxde.callbacks import Callback
+from deepxde.callbacks import Callback, PDEPointResampler
 from deepxde.utils.internal import list_to_str
 from src.utils import plot
 
 logger = logging.getLogger(__name__)
 
 
-class TestR3(Callback):
-    def __init__(self, method='R3', interval=1, verbose=True):
+class PDEPointResampler(Callback):
+    """Resample the training points for PDE and/or BC losses every given period.
+
+    Args:
+        period: How often to resample the training points (default is 100 iterations).
+        pde_points: If True, resample the training points for PDE losses (default is
+            True).
+        bc_points: If True, resample the training points for BC losses (default is
+            False; only supported by pytorch backend currently).
+    """
+
+    def __init__(self, period=100, pde_points=True, bc_points=False):
         super().__init__()
-        self.method = method
-        self.interval = interval
-        self.valid_epoch = 0
-        self.log_every = 0
+        self.period = period
+        self.pde_points = pde_points
+        self.bc_points = bc_points
+
         self.num_bcs_initial = None
-        self.num_domain_initial = None
+        self.epochs_since_last_resample = 0
+
+    def on_train_begin(self):
+        self.num_bcs_initial = self.model.data.num_bcs
+
+    def on_epoch_end(self):
+        self.epochs_since_last_resample += 1
+        if self.epochs_since_last_resample < self.period:
+            return
+        self.epochs_since_last_resample = 0
+        self.resample()
+
+    def resample(self):
+        self.model.data.resample_train_points(self.pde_points, self.bc_points)
+
+
+class PDEPointAdaptiveResampler(PDEPointResampler):
+    def __init__(self, method, period, pde_points=True, bc_points=False, verbose=True, **method_kwargs):
+        '''
+        method: str, choices=['full' 'rarg' 'rard' 'rad' 'r3']
+            Defines which method to use to resample points.
+            To resample all points uniformly (Random-R in [1]), choose 'full' (calls deepXde callback PDEPointResampler).
+            The methods given in [1] are 'rarg', 'rard', and 'rad'. The method proposed in [2] is 'r3'.
+
+        period: int,
+            Frequency to resample = each (period) iterations.
+        pde_points, bc_points: bool (default True, False)
+            Not implemented, but whether to resample points associated with PDE loss and/or ICBC loss.
+        method_kwargs: dict
+            'density_mul' : how much more dense the dense collocation set should be compared to already set by model for train set
+            'm' (default=1) : number of points to add to initial set for RARG/RARD (RAD defines it from model)
+            'k' : exponent of residual error in pdf-equation for RARD/RAD
+            'c' : addend of pdf-equation for RARD/RAD
+
+        [1] Wu, et al., 2023
+        A comprehensive study of non-adaptive and residual-based adaptive sampling for physics-informed neural networks
+        http://dx.doi.org/10.1016/j.cma.2022.115671
+        [2] Daw, et al., 2023
+        Mitigating Propagation Failures in Physics-informed Neural Networks using Retain-Resample-Release (R3) Sampling
+        https://doi.org/10.48550/arXiv.2207.02338
+
+        '''
+        super().__init__(period=period, pde_points=pde_points, bc_points=bc_points)
+        if method != 'full' and (not pde_points or bc_points):
+            raise NotImplementedError("Currently adaptive samplers support update of only points associated with PDE loss")
+        self.method = method
+
+        # parsing methods parameters # TODO put default parameters somewhere else?
+        if method.startswith("ra"): # rar-g or rar-d or rad
+            self.density_mul = method_kwargs['density_mul']
+            if method.startswith('rar'): # rar-g or rar-d
+                self.m = method_kwargs.get('m', 1)
+            if method.endswith('d'): # rar-d(k=2,c=0) or rad(k=1,c=1)
+                self.k = method_kwargs.get('k', len(method) // 2) # i am so sorry! but isn't it perfect?
+                self.c = method_kwargs.get('c', len(method) % 2)
+        # just for debugging
         self.verbose = verbose
 
+    def init(self):
+        if self.method in ['rarg', 'rard', 'rad']:
+            self.dense_num_domain = self.model.data.train_x_all.shape[0] * self.density_mul
+            if self.model.data.train_distribution == "uniform":
+                self.dense_set = self.model.data.geom.uniform_points(self.dense_num_domain, boundary=True)
+            else:
+                self.dense_set = self.model.data.geom.random_points(self.dense_num_domain, random=self.model.data.train_distribution)
+            if self.method == 'rad':
+                self.m = self.model.data.train_x_all.shape[0]
+
     def check(self):
-        # a = self.model.data.train_x_bc.shape[0] == sum(self.model.data.num_bcs)
+        # just debugging
         b = (self.model.data.train_x_all.shape[0], self.model.data.num_domain, sum(self.model.data.num_bcs))
         c = np.all(self.model.data.train_x == np.vstack([self.model.data.train_x_bc, self.model.data.train_x_all]))
-        #d = np.all(model.data.train_x_all[:self.num_boundary_initial] == model.data.train_x_bc)
         if self.verbose:
             print('shapes are right:', b)
             print('train_x = [x_bc, x_all]:', c)
 
-        #assert b, f'broken shapes, {} and {}'
-        #print('train_x_all = [x_bc, x_pde]', d)
-
     def resample(self):
-        X_res = self.model.data.train_x_all
-        pred_per_pde = self.model.predict(X_res, operator=self.model.pde.pde)
-        if isinstance(pred_per_pde, list):
-            pred_per_pde = np.hstack(pred_per_pde)
-        # TODO hotfix mean(-1) issue with several pdes (Burger2D)
-        residual_error = np.abs(pred_per_pde).mean(-1)
-        mean_res_err = np.mean(residual_error)
+        # for now everything is in here but TODO separate methods
+        if self.method == 'full':
+            return super().resample()
+        
+        # else, working with pde residuals
+        def compute_residuals(data):
+            pred_per_pde = self.model.predict(data, operator=self.model.pde.pde)
+            if isinstance(pred_per_pde, list):
+                pred_per_pde = np.hstack(pred_per_pde)
+            # TODO hotfix mean(-1) issue with several pdes (Burger2D)
+            return np.abs(pred_per_pde).mean(-1) # (N, num_pde) -> (N, )
 
-        # we will not touch train_x_bc, as it is in R3 paper. But we will uniformly sample points of geometry (considering all points equal)
-        retained = X_res[residual_error > mean_res_err]
-        resample_count = X_res.shape[0] - retained.shape[0]
-        resampled = self.model.data.geom.random_points(resample_count, 'pseudo')
-        self.model.data.train_x_all = np.vstack([resampled, retained])
-        # this will update train_x and train_y, but no touching train_x_bc
-        self.model.data.resample_train_points(False, False)
-        if self.verbose:
-            print(f"Resample is done: {resample_count} points with res_loss <= {mean_res_err}")
+        if self.method.startswith('ra'):
+            # computeresiduals on a dense set for RAR-G/RAR-D/RAD
+            residual_error = compute_residuals(self.dense_set)
+            if self.method == 'rarg':
+                # top-m added
+                idx = np.argsort(residual_error)[-self.m:]
+                selected = self.dense_set[idx]
+                self.model.data.add_anchors(selected)
+            elif self.method == 'rard':
+                # m sampled with repetition and added
+                idx = torch.multinomial(residual_error, self.m)
+                selected = self.dense_set[idx]
+                self.model.data.add_anchors(selected)
+            elif self.method == 'rad':
+                # m sampled with repetition and replaced
+                idx = torch.multinomial(residual_error, self.m)
+                selected = self.dense_set[idx]
+                self.model.data.replace_with_anchors(selected)
+        elif self.method == 'r3':
+            X_res = self.model.data.train_x_all
+            residual_error = compute_residuals(X_res)
 
-    def on_train_begin(self):
-        self.log_every = self.model.display_every
-        self.num_bcs_initial = self.model.data.num_bcs
-        self.num_domain_initial = self.model.data.num_domain
-        self.num_boundary_initial = sum(self.num_bcs_initial)
-        self.bcs_starts = [0] + np.cumsum(self.num_bcs_initial)
-        self.bcs_s_e = zip(self.bcs_starts[:-1], self.bcs_starts[1:])
+            # TODO check that it is actually already saved here:
+            pred_per_pde = self.model.outputs_losses_train[1][:self.model.pde.num_pde]
+            residual_error_saved = np.hstack(pred_per_pde).abs().mean(-1)
+            assert np.all(residual_error == residual_error_saved), 'No, it is not the same, sad!'
+
+            mean_res_err = np.mean(residual_error)
+            # we will not touch train_x_bc, as it is in R3 paper. 
+            # But we will uniformly sample points in closed geometry (considering all points equal)
+            retained = X_res[residual_error > mean_res_err]
+            resample_count = X_res.shape[0] - retained.shape[0]
+            resampled = self.model.data.geom.random_points(resample_count, 'pseudo')
+            new_train_x_all = np.vstack([resampled, retained])
+            self.model.data.train_x_all = new_train_x_all
+            # this will update train_x and train_y, but no touching train_x_bc
+            self.model.data.resample_train_points(False, False)
+            if self.verbose:
+                print(f"Resample is done: {resample_count} points with res_loss <= {mean_res_err}")
+        elif method == 'breed':
+            pass
 
     def on_epoch_end(self):
-        self.valid_epoch += 1
-        if self.valid_epoch != 0 and self.valid_epoch % self.interval != 0:
+        self.epochs_since_last_resample += 1
+        if self.epochs_since_last_resample < self.period:
             return
+        self.epochs_since_last_resample = 0
         # self.check()
         self.resample()
         # self.check()
@@ -111,9 +211,10 @@ class PlotCallback(Callback):
 
 class LossCallback(Callback):
 
-    def __init__(self, verbose=False):
+    def __init__(self, loss_plot=True, verbose=False):
         super(LossCallback, self).__init__()
         self.log_every = None
+        self.loss_plot = loss_plot
         self.verbose = verbose
         self.valid_epoch = 0
         self.loss_weights = []
@@ -144,8 +245,13 @@ class LossCallback(Callback):
                 list_to_str(loss_test),
                 list_to_str(loss_weight),
             ))
+        if self.loss_plot:
+            self.plot()
 
     def on_train_end(self):
+        self.plot()
+
+    def plot(self):
         save_path = self.model.model_save_path + "/"
         loss_history = self.model.losshistory
         loss_weights = np.array(self.loss_weights)
