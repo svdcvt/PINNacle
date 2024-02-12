@@ -120,6 +120,14 @@ class PDEPointAdaptiveResampler(PDEPointResampler):
             # TODO hotfix mean(-1) issue with several pdes (Burger2D)
             return np.abs(pred_per_pde).mean(-1) # (N, num_pde) -> (N, )
 
+        def to_pdf(res):
+            res **= self.k
+            res /= res.mean()
+            res += self.c
+            res -= res.min() # safe division ?
+            res /= res.sum()
+            return res
+
         if self.method.startswith('ra'):
             # computeresiduals on a dense set for RAR-G/RAR-D/RAD
             residual_error = compute_residuals(self.dense_set)
@@ -130,27 +138,30 @@ class PDEPointAdaptiveResampler(PDEPointResampler):
                 self.model.data.add_anchors(selected)
             elif self.method == 'rard':
                 # m sampled with repetition and added
-                idx = torch.multinomial(residual_error, self.m)
+                idx = np.random.choice(self.dense_num_domain, self.m, p=to_pdf(residual_error))
                 selected = self.dense_set[idx]
                 self.model.data.add_anchors(selected)
             elif self.method == 'rad':
                 # m sampled with repetition and replaced
-                idx = torch.multinomial(residual_error, self.m)
+                idx = np.random.choice(self.dense_num_domain, self.m, p=to_pdf(residual_error))
                 selected = self.dense_set[idx]
                 self.model.data.replace_with_anchors(selected)
         elif self.method == 'r3':
             X_res = self.model.data.train_x_all
             residual_error = compute_residuals(X_res)
-
-            # TODO check that it is actually already saved here:
-            pred_per_pde = self.model.outputs_losses_train[1][:self.model.pde.num_pde]
-            residual_error_saved = np.hstack(pred_per_pde).abs().mean(-1)
-            assert np.all(residual_error == residual_error_saved), 'No, it is not the same, sad!'
-
             mean_res_err = np.mean(residual_error)
+
+            # TODO can we use this instead of recomputing?
+            #pred_per_pde = self.model.data.last_f_computed
+            #pred_per_pde = pred_per_pde[:self.model.pde.num_pde]
+            #residual_error_saved = np.abs(np.hstack(pred_per_pde)).mean(-1)
+            #mean_res_err_saved = np.mean(residual_error_saved)
+            #mask_from_saved = residual_error_saved > mean_res_err_saved
+
             # we will not touch train_x_bc, as it is in R3 paper. 
             # But we will uniformly sample points in closed geometry (considering all points equal)
-            retained = X_res[residual_error > mean_res_err]
+            mask = residual_error > mean_res_err
+            retained = X_res[mask]
             resample_count = X_res.shape[0] - retained.shape[0]
             resampled = self.model.data.geom.random_points(resample_count, 'pseudo')
             new_train_x_all = np.vstack([resampled, retained])

@@ -32,7 +32,7 @@ pde_list = \
     [KuramotoSivashinskyEquation, GrayScottEquation] + \
     [PoissonND, HeatND]
 
-pde_list = [Burgers1D]
+pde_list = [Burgers1D, Poisson2D_Classic, Wave1D, PoissonBoltzmann2D] # these are the fastest pde to process
 
 # pde_list += \
 #     [(Burgers2D, {"datapath": "ref/burgers2d_1.dat", "icpath": ("ref/burgers2d_init_u_1.dat", "ref/burgers2d_init_v_1.dat")})] + \
@@ -139,10 +139,10 @@ if __name__ == "__main__":
             resampler_params = {
                     "method" : command_args.resample_method,
                     "period" : command_args.resample_period,
-                    "density_mul" : 5,
+                    "density_mul" : 2,
                     "m" : 1, # it depends on PDE
-                    "k" : 2.,
-                    "c" : 0.
+                    #"k" : 2., are given inside callback depending on method
+                    #"c" : 0.
                     }
             callbacks.append(
                     PDEPointAdaptiveResampler(
