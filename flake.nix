@@ -32,6 +32,8 @@
                         ];
           buildInputs = [
            ( pkgs.python3.withPackages(ps: with ps; [
+                dill
+                scikit-ooptimize
                 matplotlib
                 numpy
                 pandas
