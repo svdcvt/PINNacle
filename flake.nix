@@ -2,8 +2,10 @@
   description = "Flake: Python 3.10.11 environment with Pytorch 2.0.0 supporting CUDA 11.8 on bigfoot";
 
   inputs = {
-    # using version of nixpkgs where pytorch version is 2.0
-    nixpkgs.url = "github:nixos/nixpkgs/904f1e3235d78269b5365f2166179596cbdedd66";
+    # using version of nixpkgs where pytorch version is 2.0 (mix 23.05)
+    #nixpkgs.url = "github:nixos/nixpkgs/904f1e3235d78269b5365f2166179596cbdedd66";
+    # using older version because of scikit
+    nixpkgs.url = "github:nixos/nixpkgs/22.05";
   };
 
   nixConfig.bash-prompt = "\\e[35m\[nix-develop (\\h)\]\\e[34m\\w\\e[39m$ ";
@@ -33,7 +35,7 @@
           buildInputs = [
            ( pkgs.python3.withPackages(ps: with ps; [
                 dill
-                scikit-ooptimize
+                scikit-optimize
                 matplotlib
                 numpy
                 pandas

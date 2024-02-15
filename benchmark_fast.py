@@ -34,6 +34,8 @@ pde_list = \
 
 pde_list = [Burgers1D, Poisson2D_Classic, Wave1D, PoissonBoltzmann2D] # these are the fastest pde to process
 
+pde_list = [KuramotoSivashinskyEquation, GrayScottEquation]
+
 # pde_list += \
 #     [(Burgers2D, {"datapath": "ref/burgers2d_1.dat", "icpath": ("ref/burgers2d_init_u_1.dat", "ref/burgers2d_init_v_1.dat")})] + \
 #     [(Burgers2D, {"datapath": "ref/burgers2d_2.dat", "icpath": ("ref/burgers2d_init_u_2.dat", "ref/burgers2d_init_v_2.dat")})] + \
