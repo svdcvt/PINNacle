@@ -10,6 +10,8 @@ from deepxde.callbacks import Callback, PDEPointResampler
 from deepxde.utils.internal import list_to_str
 from src.utils import plot
 
+from src.utils.samplers import Breed
+
 logger = logging.getLogger(__name__)
 
 
@@ -86,6 +88,12 @@ class PDEPointAdaptiveResampler(PDEPointResampler):
             if method.endswith('d'): # rar-d(k=2,c=0) or rad(k=1,c=1)
                 self.k = method_kwargs.get('k', len(method) // 2) # i am so sorry! but isn't it perfect?
                 self.c = method_kwargs.get('c', len(method) % 2)
+        elif method == 'breed':
+            if "breed" not in method_kwargs:
+                print("WARNING: Parameters for Breed algorithm are not given in `method_kwargs['breed']`, using default.")
+            self.breed = method_kwargs.get("breed", dict())
+        elif method == 'r3':
+            self.resample_count = []
         # just for debugging
         self.verbose = verbose
 
@@ -98,6 +106,9 @@ class PDEPointAdaptiveResampler(PDEPointResampler):
                 self.dense_set = self.model.data.geom.random_points(self.dense_num_domain, random=self.model.data.train_distribution)
             if self.method == 'rad':
                 self.m = self.model.data.train_x_all.shape[0]
+        elif self.method == 'breed':
+            print(self.breed)
+            self.breed = Breed(self.model.data, **self.breed)
 
     def check(self):
         # just debugging
@@ -120,13 +131,6 @@ class PDEPointAdaptiveResampler(PDEPointResampler):
             # TODO hotfix mean(-1) issue with several pdes (Burger2D)
             return np.abs(pred_per_pde).mean(-1) # (N, num_pde) -> (N, )
 
-        def to_pdf(res):
-            res **= self.k
-            res /= res.mean()
-            res += self.c
-            res -= res.min() # safe division ?
-            res /= res.sum()
-            return res
 
         if self.method.startswith('ra'):
             # computeresiduals on a dense set for RAR-G/RAR-D/RAD
@@ -136,16 +140,24 @@ class PDEPointAdaptiveResampler(PDEPointResampler):
                 idx = np.argsort(residual_error)[-self.m:]
                 selected = self.dense_set[idx]
                 self.model.data.add_anchors(selected)
-            elif self.method == 'rard':
-                # m sampled with repetition and added
+            elif self.method in ['rard', 'rad']:
+                # distribution based
+                def to_pdf(res):
+                    res **= self.k
+                    res /= res.mean()
+                    res += self.c
+                    res -= res.min() # safe division ?
+                    res /= res.sum()
+                    return res
+                
                 idx = np.random.choice(self.dense_num_domain, self.m, p=to_pdf(residual_error))
                 selected = self.dense_set[idx]
-                self.model.data.add_anchors(selected)
-            elif self.method == 'rad':
-                # m sampled with repetition and replaced
-                idx = np.random.choice(self.dense_num_domain, self.m, p=to_pdf(residual_error))
-                selected = self.dense_set[idx]
-                self.model.data.replace_with_anchors(selected)
+                if self.method == 'rard':
+                    # m sampled with repetition and added
+                    self.model.data.add_anchors(selected)
+                elif self.method == 'rad':
+                    # m sampled with repetition and replaced
+                    self.model.data.replace_with_anchors(selected)
         elif self.method == 'r3':
             X_res = self.model.data.train_x_all
             residual_error = compute_residuals(X_res)
@@ -162,16 +174,17 @@ class PDEPointAdaptiveResampler(PDEPointResampler):
             # But we will uniformly sample points in closed geometry (considering all points equal)
             mask = residual_error > mean_res_err
             retained = X_res[mask]
-            resample_count = X_res.shape[0] - retained.shape[0]
-            resampled = self.model.data.geom.random_points(resample_count, 'pseudo')
+            self.resample_count.append(X_res.shape[0] - retained.shape[0])
+            resampled = self.model.data.geom.random_points(self.resample_count[-1], 'pseudo')
             new_train_x_all = np.vstack([resampled, retained])
             self.model.data.train_x_all = new_train_x_all
             # this will update train_x and train_y, but no touching train_x_bc
             self.model.data.resample_train_points(False, False)
-            if self.verbose:
-                print(f"Resample is done: {resample_count} points with res_loss <= {mean_res_err}")
-        elif method == 'breed':
-            pass
+        elif self.method == 'breed':
+            X_res = self.model.data.train_x_all
+            residual_error = compute_residuals(X_res)
+            self.model.data.train_x_all = self.breed.get_points(residual_error)
+            self.model.data.resample_train_points(False, False)
 
     def on_epoch_end(self):
         self.epochs_since_last_resample += 1
@@ -181,6 +194,14 @@ class PDEPointAdaptiveResampler(PDEPointResampler):
         # self.check()
         self.resample()
         # self.check()
+
+    def on_train_end(self):
+        if self.method == "breed":
+            print("BREED: out-of-bounds count per update:", self.breed.oob_count)
+        elif self.method == 'r3':
+            print(f"R3: points resampled per update:", self.resample_count)
+
+
 
 
 class PlotCallback(Callback):

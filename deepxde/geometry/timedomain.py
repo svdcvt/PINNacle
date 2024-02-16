@@ -24,6 +24,7 @@ class GeometryXTime:
         self.geometry = geometry
         self.timedomain = timedomain
         self.dim = geometry.dim + timedomain.dim
+        self.bbox = (np.append(geometry.bbox[0], timedomain.bbox[0]), np.append(geometry.bbox[1], timedomain.bbox[1]))
 
     def on_boundary(self, x):
         return self.geometry.on_boundary(x[:, :-1])
