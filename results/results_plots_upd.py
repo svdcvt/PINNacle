@@ -19,10 +19,11 @@ for pp in range(0, P, RN):
     fig, axes = plt.subplots(K, RN, figsize=(5*RN + RN, 3 * K + K), sharex=True)
     for k, figname in enumerate(grouped_df.columns):
         for i, pde in enumerate(all_pdes[pp:pp + RN]):
-            ipp = i + pp
-            res = grouped_df.iloc[ipp * M:(ipp + 1) * M, k].values
+            res = grouped_df.iloc[:, k]
+            res = res.loc[pde]
+            methods = [m for m in all_methods if m in res.index]
             axes[0,i].set_title(pde)
-            axes[k,i].bar(all_methods, res)
+            axes[k,i].bar(methods, res.loc[methods])
             axes[1,i].set_yscale('log')
             axes[k,0].set_ylabel(f"{'log-' * k}{figname}")
     pdf.savefig(fig)    
