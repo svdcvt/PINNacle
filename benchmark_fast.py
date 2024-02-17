@@ -32,7 +32,9 @@ pde_list = \
     [KuramotoSivashinskyEquation, GrayScottEquation] + \
     [PoissonND, HeatND]
 
-pde_list = [Burgers1D, Poisson2D_Classic, Wave1D, PoissonBoltzmann2D] # these are the fastest pde to process
+# pde_list = [Burgers1D, Poisson2D_Classic, Wave1D, PoissonBoltzmann2D] # these are the fastest pde to process
+
+# pde_list = [KuramotoSivashinskyEquation, GrayScottEquation]
 
 # pde_list += \
 #     [(Burgers2D, {"datapath": "ref/burgers2d_1.dat", "icpath": ("ref/burgers2d_init_u_1.dat", "ref/burgers2d_init_v_1.dat")})] + \
@@ -72,7 +74,7 @@ if __name__ == "__main__":
     parser.add_argument('--plot-every', type=int, default=2000)
     parser.add_argument('--repeat', type=int, default=1)
     parser.add_argument('--method', choices=['gepinn', 'laaf', 'gaaf', 'multiadam', 'lra', 'ntk', 'lbfgs']) # default is None: FNN net adn Adam opt
-    parser.add_argument('--resample-method', choices=['rarg', 'rard', 'rad', 'r3', 'full']) # default is None: no resampling
+    parser.add_argument('--resample-method', choices=['breed', 'rarg', 'rard', 'rad', 'r3', 'full']) # default is None: no resampling
     parser.add_argument('--resample-period', type=int, default=1000)
     command_args = parser.parse_args()
 
@@ -143,6 +145,12 @@ if __name__ == "__main__":
                     "m" : 1, # it depends on PDE
                     #"k" : 2., are given inside callback depending on method
                     #"c" : 0.
+                    "breed" : { # these are very specific to each PDE, but we going to use standard for all
+                        "sigma" : 0.0005,
+                        "start" : 0.15,
+                        "end" : 0.75,
+                        "breakpoint": int((command_args.iter // command_args.resample_period) * 0.2) # 400
+                        } 
                     }
             callbacks.append(
                     PDEPointAdaptiveResampler(
