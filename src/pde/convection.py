@@ -7,7 +7,7 @@ from . import baseclass
 
 class Convection1D(baseclass.BaseTimePDE):
 
-    def __init__(self, , geom=[0, 2*np.pi], time=[0, 1], beta=30.0, nu=0.0, rho=0.0):
+    def __init__(self, geom=[0, 2*np.pi], time=[0, 1], beta=30.0, nu=0.0, rho=0.0):
         super().__init__()
         # output dim
         self.output_dim = 1
@@ -43,7 +43,7 @@ class Convection1D(baseclass.BaseTimePDE):
         self.set_pdeloss()
 
         # refdata
-        self.create_ref_data(xgrid=DEFAULT_NUM_TEST_POINTS, nt=)
+        self.create_ref_data(nx=126, nt=20) # similar to callback creation of ref data when solution is available (2500 points total)
 
         # BCs
         def ic_func(x):
@@ -64,9 +64,9 @@ class Convection1D(baseclass.BaseTimePDE):
         # train settings
         self.training_points()  # default
 
-    def create_ref_data(self, nx=256, nt=100):
+    def create_ref_data(self, nx=256, nt=100): # 256 and 100 as in R3 code
         """
-        xgrid: number of X points
+        xgrid: number of X points (for some reason should be even number..)
         nt: number of time steps
         """
         h = 2 * np.pi / nx
@@ -83,7 +83,7 @@ class Convection1D(baseclass.BaseTimePDE):
         IKX2 = IKX * IKX
 
         uhat0 = np.fft.fft(u0)
-        nu_factor = np.exp(- beta * IKX * T)
+        nu_factor = np.exp(- self.beta * IKX * T)
         A = uhat0 - np.fft.fft(G) * 0 # at t=0, second term goes away
         uhat = A * nu_factor + np.fft.fft(G) * T # for constant, fft(p) dt = fft(p)*T
         u = np.real(np.fft.ifft(uhat))

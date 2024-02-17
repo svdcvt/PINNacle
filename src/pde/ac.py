@@ -49,6 +49,6 @@ class AllenCahn1D(baseclass.BaseTimePDE):
         # train settings
         self.training_points()  # default
 
-    def load_ref_data(self.datapath):
+    def load_ref_data(self, datapath):
         data = scipy.io.loadmat(datapath)
         self.ref_data = np.hstack([data['x'].T, data['uu']]).astype(np.float32) # X,T = 512, 1+201 and initially float64
