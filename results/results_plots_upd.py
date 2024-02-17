@@ -15,7 +15,7 @@ pdf = matplotlib.backends.backend_pdf.PdfPages(name + '.pdf')
 # bar-plots of runtime and l2rel (last epoch)
 K = grouped_df.shape[1]
 RN = 4 # maximum number of plots in a row
-for pp in range(0, P, P//RN):
+for pp in range(0, P, RN):
     fig, axes = plt.subplots(K, RN, figsize=(5*RN + RN, 3 * K + K), sharex=True)
     for k, figname in enumerate(grouped_df.columns):
         for i, pde in enumerate(all_pdes[pp:pp + RN]):
@@ -38,7 +38,7 @@ P = len(pdes)
 # line plots of l2rel across iterations for each pde
 pdf = matplotlib.backends.backend_pdf.PdfPages(name + '.pdf')
 RN = 4 # maximum number of plots in a row
-for pp in range(0, P, P // RN):
+for pp in range(0, P, RN):
     fig, axes = plt.subplots(1, RN, figsize=(5 * RN + RN, 5))
     for i, pde in enumerate(pdes[pp: pp + RN]):
         axes[i].set_title(pde)

@@ -1,5 +1,5 @@
 {
-  description = "Flake: Python 3.10.11 environment with Pytorch 2.0.0 supporting CUDA 11.8 on bigfoot";
+  description = "Flake: Python 3.9 environment with Pytorch 1.11.0 (sshell supports CUDA 11.8)";
 
   inputs = {
     # using version of nixpkgs where pytorch version is 2.0 (mix 23.05)
@@ -47,6 +47,21 @@
          shellHook= ''
            export LD_LIBRARY_PATH=${sshell.libPath}:${sshell.xlibPath}:${pkgs.cudaPackages_11.cudatoolkit}/lib:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
          '';  
+        };
+
+        dahushell = pkgs.mkShell {
+          buildInputs = [
+           ( pkgs.python3.withPackages(ps: with ps; [
+                dill
+                scikit-optimize
+                matplotlib
+                numpy
+                pandas
+                scikit-learn
+                scipy
+                pytorch
+          ]))
+         ];
         };
       };
     };
