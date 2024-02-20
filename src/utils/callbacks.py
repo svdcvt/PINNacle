@@ -197,7 +197,13 @@ class PDEPointAdaptiveResampler(PDEPointResampler):
 
     def on_train_end(self):
         if self.method == "breed":
-            print("BREED: out-of-bounds count per update:", self.breed.oob_count)
+            avg_per_parent = [np.round(np.mean(sub), 2) for sub in self.breed.oob_count]
+            sum_per_update = [np.sum(sub) for sub in self.breed.oob_count] 
+            num_resamples = len(self.breed.oob_count)
+            window_size = max((num_resamples - 10), 1)
+            movavg = lambda x: np.convolve(x, np.ones(window_size), 'valid') / window_size
+            print("BREED: out-of-bounds count moving average (avg per parent):", movavg(avg_per_parent))
+            print("BREED: out-of-bounds count moving average (sun per update):", movavg(sum_per_update))
         elif self.method == 'r3':
             print(f"R3: points resampled per update:", self.resample_count)
 

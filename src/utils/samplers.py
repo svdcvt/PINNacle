@@ -62,8 +62,10 @@ class Breed(BaseSampler):
             linearly increasing from start to end, after which R values are constant (=end)
         """
         super().__init__(pde, init_points)
+        self.sigma_opt_factor = 0.0005 # magic number for sigma being 0.001 for domain length 2 as in Allen Cahn
         self._sigma_init(sigma)
-        self.cov = np.diag(self.sigma)
+        self.covs = np.full((self.size, self.dim), self.sigma) # covdiag per point!
+        self.cov_oob_factor = 0.3 # decrease covariance to sample inside domain if oob happened
         self.Rs = np.linspace(start, end, breakpoint, endpoint=True)
         self.R_i = -1
         self.R = start
@@ -85,11 +87,11 @@ class Breed(BaseSampler):
         else:
             raise RuntimeError(f"Argument `sigma` for `samplers.Breed` is wrong type: {type(sigma)}")
 
-        max_sigma = np.diff(self.domainbbox, axis=0) / 8 # six sigma rule to minimize outsiders
-        max_sigma = max_sigma.ravel()
+        dim_scales = np.diff(self.domainbbox, axis=0).ravel()
+        max_sigma = dim_scales / 8 # six sigma rule to minimize outsiders
         if not np.logical_and(max_sigma >= sigma, sigma > 0).all():
             self.sigma = np.where(sigma > max_sigma, max_sigma, sigma)
-            self.sigma = np.where(sigma <= 0, max_sigma / 250, sigma)
+            self.sigma = np.where(sigma <= 0, dim_scales * self.sigma_opt_factor, sigma)
             print(f"WARNING (samplers.Breed): Given value of sigma ({sigma}) is updated to {self.sigma}") 
         else:
             self.sigma = sigma
@@ -112,19 +114,33 @@ class Breed(BaseSampler):
         parental_idx = np.random.choice(np.arange(self.size), size=self.size, p=self.distribution.ravel())
 
         new_sample_batch = np.empty_like(self.points)
-        self.oob_count.append(0)
+        new_covariances = np.full_like(self.covs, self.sigma)
+        self.oob_count.append([])
         for i, idx in enumerate(parental_idx):
             if np.random.uniform(0, 1) < self.R:
                 parent = self.points[idx]
-                child = multivariate_normal.rvs(mean=parent, cov=self.cov, size=1)[None] # shape (D, ) -> (1, D)
+                # preserve parental covariance
+                new_covariances[i] = self.covs[idx]
+                child = multivariate_normal.rvs(mean=parent, cov=np.diag(new_covariances[i]), size=1)[None] # shape (D, ) -> (1, D)
                 # self.inside wants (N, D) array
-                while not self.inside(child)[0]:
-                    self.oob_count[-1] += 1
-                    child = multivariate_normal.rvs(mean=parent, cov=self.cov, size=1)[None]
+                parent_oob = 0
+                while not self.inside(child)[0]: # TODO decrease sigma only in one dimension!
+                    parent_oob += 1
+                    # decrease covariance to not sample OOB, now for this child and for this child as parent in future
+                    new_covariances[i] *= self.cov_oob_factor
+                    child = multivariate_normal.rvs(mean=parent, cov=np.diag(new_covariances[i]), size=1)[None]
+                if parent_oob != 0:
+                    self.oob_count[-1].append(parent_oob)
             else:
                 child = self.domain.random_points(1)
             new_sample_batch[i] = child
         self.points = new_sample_batch # shuffled naturally?
+        self.covs = new_covariances
+        
+        #print('=== Breed: OOB stats ===',
+        #     f'oob_count = {sum(self.oob_count[-1])}', 
+        #     f'cov unique = {np.unique(new_covariances, return_counts=True, axis=0)[1]}',
+        #     sep='\n')
         self._R_step()
         return self.points
 
