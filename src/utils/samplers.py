@@ -42,7 +42,7 @@ class Breed(BaseSampler):
     Methods:
     
     """
-    def __init__(self, pde, init_points, sigma=None, start=0.15, end=0.75, breakpoint=10):
+    def __init__(self, pde, init_points, sigma=0.0, start=0.15, end=0.75, breakpoint=10):
         """
         Args:
         
@@ -50,9 +50,9 @@ class Breed(BaseSampler):
             The object that defines PDE and domain.
         init_points: np.ndarray
             The initial uniform points given by `deepxde.model.Model.data.train_x_all`
-        sigma: float, array_like[floats], or None
+        sigma: float, array_like[floats]
             The covariance value for Gaussian neighbourhoods.
-            Default value `None` calculates maximum possible in the domain value (not recommended).
+            If contains any non-positive values, will be updated to "optimal" in the domain value (in dev).
             If array is given, the values are the main diagonal of cov. matrix. The size must be equal to
             number of dimensions of PDE domain. If float is given, all values of the main diagonal are equal.
         start, end: float
@@ -62,7 +62,6 @@ class Breed(BaseSampler):
             linearly increasing from start to end, after which R values are constant (=end)
         """
         super().__init__(pde, init_points)
-
         self._sigma_init(sigma)
         self.cov = np.diag(self.sigma)
         self.Rs = np.linspace(start, end, breakpoint, endpoint=True)
@@ -82,17 +81,16 @@ class Breed(BaseSampler):
         elif isinstance(sigma, (np.ndarray, list, tuple)): # array_like but not string
             sigma = np.array(sigma).ravel()
             assert sigma.shape[0] == self.dim, f"The size of array-like `sigma` must be equal to number "\
-                    f"of dimensions of PDE domain: {sigma.size} != {self.dim}"
-        elif sigma is None:
-            pass
+                                               f"of dimensions of PDE domain: {sigma.size} != {self.dim}"
         else:
             raise RuntimeError(f"Argument `sigma` for `samplers.Breed` is wrong type: {type(sigma)}")
 
         max_sigma = np.diff(self.domainbbox, axis=0) / 8 # six sigma rule to minimize outsiders
         max_sigma = max_sigma.ravel()
-        if (sigma > max_sigma).any() or sigma is None:
+        if not np.logical_and(max_sigma >= sigma, sigma > 0).all():
             self.sigma = np.where(sigma > max_sigma, max_sigma, sigma)
-            print(f"WARNING: Given value of sigma is {'too big' if sigma is not None else 'not given'} ({sigma}), it is updated to {max_sigma}")
+            self.sigma = np.where(sigma <= 0, max_sigma / 250, sigma)
+            print(f"WARNING (samplers.Breed): Given value of sigma ({sigma}) is updated to {self.sigma}") 
         else:
             self.sigma = sigma
 
