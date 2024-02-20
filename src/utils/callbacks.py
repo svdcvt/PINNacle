@@ -108,7 +108,7 @@ class PDEPointAdaptiveResampler(PDEPointResampler):
                 self.m = self.model.data.train_x_all.shape[0]
         elif self.method == 'breed':
             print(self.breed)
-            self.breed = Breed(self.model.data, **self.breed)
+            self.breed = Breed(self.model.pde, self.model.data.train_x_all, **self.breed)
 
     def check(self):
         # just debugging
