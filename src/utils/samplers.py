@@ -3,6 +3,7 @@ import torch.nn as nn
 import numpy as np
 from scipy.stats import multivariate_normal
 
+import matplotlib.pyplot as plt
 
 class BaseSampler:
     def __init__(self, pde, init_points):
@@ -12,6 +13,7 @@ class BaseSampler:
         init_points: np.ndarray
             The initial uniform points given by `deepxde.model.Model.data.train_x_all`
         '''
+        self._name = pde.__class__.__name__
         self.domain = pde.geomtime if hasattr(pde, 'geomtime') else pde.geom # TimePDE or PDE
         self.domainbbox = np.array(pde.bbox).reshape(-1, 2).T # [x_1_min, x_1_max, x_2_min, x_2_max, ...] -> [[x_1_min, ...],[x_1_max, ...]]
         self.points = init_points # todo check num points is right, it is numpy, etc
@@ -117,6 +119,12 @@ class Breed(BaseSampler):
         new_sample_batch = np.empty_like(self.points)
         new_covariances = np.full_like(self.covs, self.sigma)
         self.oob_count.append([])
+
+        plt.figure(figsize=(8,8))
+        plt.xlim(*(self.domainbbox[:,0]+[-0.1, 0.1]))
+        plt.ylim(*(self.domainbbox[:,1]+[-0.1, 0.1]))
+        c = []
+        oob = []
         for i, idx in enumerate(parental_idx):
             if np.random.uniform(0, 1) < self.R:
                 parent = self.points[idx]
@@ -126,22 +134,34 @@ class Breed(BaseSampler):
                 # self.inside wants (N, D) array
                 parent_oob = 0
                 while not self.inside(child)[0]: # TODO decrease sigma only in one dimension!
+                    oob.append(child)
                     parent_oob += 1
                     # decrease covariance to not sample OOB, now for this child and for this child as parent in future
                     new_covariances[i] *= self.cov_oob_factor
                     child = multivariate_normal.rvs(mean=parent, cov=np.diag(new_covariances[i]), size=1)[None]
                 if parent_oob != 0:
                     self.oob_count[-1].append(parent_oob)
+                c.append('b')
             else:
+                c.append('g')
                 child = self.domain.random_points(1)
             new_sample_batch[i] = child
-        self.points = new_sample_batch # shuffled naturally?
-        self.covs = new_covariances
-        
+        u = np.array([1 if x=='g' else 0 for x in c])
+        plt.scatter(new_sample_batch[:,0], new_sample_batch[:,1], s=5, alpha=np.where(u, 0.1, 0.5), c=c)
+        oob = np.vstack(oob)
+        plt.scatter(oob[:,0], oob[:,1], s=5, alpha=0.5, c='r')
+        plt.title(f'R={1-u.mean():.3f}({self.R:.3f})')
+        plt.savefig(f'./tmp/{self._name}_{self.R_i}.png')
+        plt.close()
+
         #print('=== Breed: OOB stats ===',
+        #     f'R = {1-u.mean()}({self.R})',
         #     f'oob_count = {sum(self.oob_count[-1])}', 
         #     f'cov unique = {np.unique(new_covariances, return_counts=True, axis=0)[1]}',
         #     sep='\n')
+        
+        self.points = new_sample_batch # shuffled naturally?
+        self.covs = new_covariances
         self._R_step()
         return self.points
 
