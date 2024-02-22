@@ -73,6 +73,7 @@ class Breed(BaseSampler):
         self.R_i = 0
         self.R = start
         self.oob_count = []
+        self.isuniform = np.full((self.size,), True)
 
     def inside(self, x):
         if hasattr(self.domain, 'inside'): # time independant
@@ -107,7 +108,7 @@ class Breed(BaseSampler):
     def _get_points_boundary(self, loss):
         raise NotImplementedError()
 
-    def get_points(self, residuals, boundary_only=False):
+    def get_points(self, residuals, boundary_only=False, plot=False):
         if boundary_only:
             return self.get_points_boundry(residuals)
         # else into the whole domain
@@ -118,14 +119,18 @@ class Breed(BaseSampler):
 
         new_sample_batch = np.empty_like(self.points)
         new_covariances = np.full_like(self.covs, self.sigma)
+        new_parentisu = np.full(self.size, True)
+        new_isuniform = np.full(self.size, True)
         self.oob_count.append([])
 
-        plt.figure(figsize=(8,8))
-        plt.xlim(*(self.domainbbox[:,0]+[-0.1, 0.1]))
-        plt.ylim(*(self.domainbbox[:,1]+[-0.1, 0.1]))
-        c = []
+        if plot:
+            plt.figure(figsize=(8,8))
+            plt.xlim(*(self.domainbbox[:,0]+[-0.1, 0.1]))
+            plt.ylim(*(self.domainbbox[:,1]+[-0.1, 0.1]))
         oob = []
         for i, idx in enumerate(parental_idx):
+            # TODO fix uniform to not be sampled by chance
+            # because can make uniform an import parent
             if np.random.uniform(0, 1) < self.R:
                 parent = self.points[idx]
                 # preserve parental covariance
@@ -141,27 +146,44 @@ class Breed(BaseSampler):
                     child = multivariate_normal.rvs(mean=parent, cov=np.diag(new_covariances[i]), size=1)[None]
                 if parent_oob != 0:
                     self.oob_count[-1].append(parent_oob)
-                c.append('b')
+                new_isuniform[i] = False
+                new_parentisu[idx] = False
             else:
-                c.append('g')
                 child = self.domain.random_points(1)
             new_sample_batch[i] = child
-        u = np.array([1 if x=='g' else 0 for x in c])
-        plt.scatter(new_sample_batch[:,0], new_sample_batch[:,1], s=5, alpha=np.where(u, 0.1, 0.5), c=c)
-        oob = np.vstack(oob)
-        plt.scatter(oob[:,0], oob[:,1], s=5, alpha=0.5, c='r')
-        plt.title(f'R={1-u.mean():.3f}({self.R:.3f})')
-        plt.savefig(f'./tmp/{self._name}_{self.R_i}.png')
-        plt.close()
+        if plot:
+            color = np.where(new_isuniform, 'g', 'b') 
+            alpha = np.where(new_isuniform, 0.1, 0.5)
+            plt.scatter(new_sample_batch[:,0], new_sample_batch[:,1], s=5, alpha=alpha, c=color)
+            oob = np.vstack(oob)
+            plt.scatter(oob[:,0], oob[:,1], s=5, alpha=0.5, c='r')
+            plt.title(f'R={1-u.mean():.3f}({self.R:.3f})')
+            plt.savefig(f'./tmp/{self._name}_{self.R_i}.png')
+            plt.close()
 
-        #print('=== Breed: OOB stats ===',
-        #     f'R = {1-u.mean()}({self.R})',
-        #     f'oob_count = {sum(self.oob_count[-1])}', 
-        #     f'cov unique = {np.unique(new_covariances, return_counts=True, axis=0)[1]}',
-        #     sep='\n')
+            print('=== Breed: OOB stats ===',
+                 f'R = {1-u.mean()}({self.R})',
+                 f'oob_count = {sum(self.oob_count[-1])}', 
+                 f'cov unique = {np.unique(new_covariances, return_counts=True, axis=0)[1]}',
+                 sep='\n')
         
+        stat_ttff = np.logical_and(new_parentisu, self.isuniform) # TT 1, TF FT 0, FF 0
+        stat_tfft = np.logical_xor(new_parentisu, self.isuniform) # TT 0, TF FT 1, FF 0
+
+        print('=== Breed: parent/children stats ===')
+        print("Num_children distribution\n", np.unique(np.unique(parental_idx[~new_isuniform], return_counts=True)[1], return_counts=True))
+        print("Possible Num_children distribution\n", np.unique(np.unique(parental_idx, return_counts=True)[1], return_counts=True))
+
+        print(f'=== Breed: changes stats R = {new_isuniform.sum()}, {new_parentisu.sum()}, ({self.R}) ===',
+             f'uniform -> uniform: {stat_ttff.sum()}',
+             f'uniform -> parent:  {(stat_tfft[self.isuniform] == 1).sum()}',
+             f'parent -> parent:   {self.size - stat_ttff.sum() - stat_tfft.sum()}',
+             f'parent -> uniform   {(stat_tfft[~self.isuniform] == 1).sum()}',
+             sep='\n')
+
         self.points = new_sample_batch # shuffled naturally?
         self.covs = new_covariances
+        self.isuniform = new_isuniform
         self._R_step()
         return self.points
 
