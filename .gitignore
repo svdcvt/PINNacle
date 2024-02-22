@@ -1,6 +1,7 @@
 #
 results/*.ipynb
 *.swp
+tmp/
 #
 *.png
 *.txt
