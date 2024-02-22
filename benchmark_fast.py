@@ -36,6 +36,8 @@ pde_list = \
 
 # pde_list = [KuramotoSivashinskyEquation, GrayScottEquation]
 
+pde_list = [Burgers1D, Wave1D]
+
 # pde_list += \
 #     [(Burgers2D, {"datapath": "ref/burgers2d_1.dat", "icpath": ("ref/burgers2d_init_u_1.dat", "ref/burgers2d_init_v_1.dat")})] + \
 #     [(Burgers2D, {"datapath": "ref/burgers2d_2.dat", "icpath": ("ref/burgers2d_init_u_2.dat", "ref/burgers2d_init_v_2.dat")})] + \
@@ -146,7 +148,7 @@ if __name__ == "__main__":
                     #"k" : 2., are given inside callback depending on method
                     #"c" : 0.
                     "breed" : { # these are very specific to each PDE, but we going to use standard for all
-                        "sigma" : 0.0005,
+                        "sigma" : 0.0,
                         "start" : 0.15,
                         "end" : 0.75,
                         "breakpoint": int((command_args.iter // command_args.resample_period) * 0.2) # 400

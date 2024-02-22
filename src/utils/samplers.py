@@ -65,9 +65,10 @@ class Breed(BaseSampler):
         self.sigma_opt_factor = 0.0005 # magic number for sigma being 0.001 for domain length 2 as in Allen Cahn
         self._sigma_init(sigma)
         self.covs = np.full((self.size, self.dim), self.sigma) # covdiag per point!
-        self.cov_oob_factor = 0.3 # decrease covariance to sample inside domain if oob happened
+        self.cov_oob_factor = 0.1 # decrease covariance to sample inside domain if oob happened
         self.Rs = np.linspace(start, end, breakpoint, endpoint=True)
-        self.R_i = -1
+        print("Rs: ", self.Rs)
+        self.R_i = 0
         self.R = start
         self.oob_count = []
 
@@ -98,7 +99,7 @@ class Breed(BaseSampler):
 
     def _R_step(self):
         self.R_i += 1
-        if self.R_i < (len(self.Rs) - 1):
+        if self.R_i < len(self.Rs):
             self.R = self.Rs[self.R_i]
 
     def _get_points_boundary(self, loss):
