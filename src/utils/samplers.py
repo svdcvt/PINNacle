@@ -141,6 +141,8 @@ class Breed(BaseSampler):
             # and no more uniform-by-chance changing self.distribution
             if p_count < N_c and np.random.uniform(0, 1) < self.R:
                 idx = parental_idx[p_count]
+                if plot:
+                    spec.append(childcount[p_count])
                 p_count += 1
                 parent = self.points[idx]
                 # preserve parental covariance
@@ -160,8 +162,6 @@ class Breed(BaseSampler):
                 new_isuniform[i] = False
                 new_sample_batch[i] = child
                 i += 1
-                if plot:
-                    spec.append(childcount[p_count])
             elif u_count < N_u:
                 child = self.domain.random_points(1)
                 u_count += 1
@@ -170,13 +170,12 @@ class Breed(BaseSampler):
                 if plot:
                     spec.append(0)
         if plot:
+            spec = np.array(spec)
             color = np.where(new_isuniform, 'g', 'b') 
-            alpha = np.where(new_isuniform, 0.1, 0.5)
-            size = np.where(new_isuniform, 3, spec * 2 + 5)
-            plt.scatter(new_sample_batch[:,0], new_sample_batch[:,1], s=size, alpha=alpha, c=color)
+            size = np.where(new_isuniform, 3, spec ** 2.5 * 3)
+            plt.scatter(new_sample_batch[:,0], new_sample_batch[:,1], s=size, alpha=0.1, c=color)
             oob = np.vstack(oob)
-            plt.scatter(oob[:,0], oob[:,1], s=3, alpha=0.5, c='r')
-            plt.title(f'R={1-u.mean():.3f}({self.R:.3f})')
+            plt.scatter(oob[:,0], oob[:,1], s=3, alpha=0.3, c='r')
             plt.savefig(f'../tmp/{self._name}_{self.R_i}.png')
             plt.close()
 
@@ -197,8 +196,7 @@ class Breed(BaseSampler):
             was_parent = ~self.isuniform
             was_uniform = self.isuniform
 
-            print('=== Breed: changes stats ===',
-                 f'Parent points  = {become_parent.sum()}',
+            print(f'Parent points  = {become_parent.sum()}',
                  f'Non-parent pts = {become_uniform.sum()}',
                  f'uniform -> uniform   : {np.logical_and(was_uniform, become_uniform).sum()}',
                  f'uniform -> parent    : {np.logical_and(was_uniform, become_parent).sum()}',
@@ -212,3 +210,93 @@ class Breed(BaseSampler):
         self._R_step()
         return self.points
 
+    def get_points_skewed(self, residuals, boundary_only=False, plot=True, stats=False):
+        residuals -= residuals.min()
+        self.distribution = residuals / residuals.sum()
+        parental_idx = np.random.choice(self.indexes, size=self.size, p=self.distribution.ravel())
+        u, i, c = np.unique(parental_idx, return_inverse=True, return_counts=True)
+        child_count = c[i] # take only those who gave more than one child
+        
+        new_sample_batch = np.empty_like(self.points)
+        new_covariances = np.full_like(self.covs, self.sigma)
+        new_isuniform = np.full(self.size, True)
+        self.oob_count.append([])
+
+        if plot:
+            spec = []
+            plt.figure(figsize=(8,8))
+            plt.xlim(*(self.domainbbox[:,0]+[-0.1, 0.1]))
+            plt.ylim(*(self.domainbbox[:,1]+[-0.1, 0.1]))
+            oob = []
+        i = 0
+        for i in range(self.size):
+            if child_count[i] > 1:
+                idx = parental_idx[i]
+                if plot:
+                    spec.append(child_count[i])
+                p_count += 1
+                parent = self.points[idx]
+                # preserve parental covariance
+                new_covariances[i] = self.covs[idx]
+                child = multivariate_normal.rvs(mean=parent, cov=np.diag(new_covariances[i]), size=1)[None] # shape (D, ) -> (1, D)
+                # self.inside wants (N, D) array
+                parent_oob = 0
+                while not self.inside(child)[0]: # TODO decrease sigma only in one dimension!
+                    if plot:
+                        oob.append(child)
+                    parent_oob += 1
+                    # decrease covariance to not sample OOB, now for this child and for this child as parent in future
+                    new_covariances[i] *= self.cov_oob_factor
+                    child = multivariate_normal.rvs(mean=parent, cov=np.diag(new_covariances[i]), size=1)[None]
+                if parent_oob != 0:
+                    self.oob_count[-1].append(parent_oob)
+                new_isuniform[i] = False
+                new_sample_batch[i] = child
+                i += 1
+            elif u_count < N_u:
+                child = self.domain.random_points(1)
+                u_count += 1
+                new_sample_batch[i] = child
+                i += 1
+                if plot:
+                    spec.append(0)
+        if plot:
+            spec = np.array(spec)
+            color = np.where(new_isuniform, 'g', 'b') 
+            size = np.where(new_isuniform, 3, spec ** 2.5 * 3)
+            plt.scatter(new_sample_batch[:,0], new_sample_batch[:,1], s=size, alpha=0.1, c=color)
+            oob = np.vstack(oob)
+            plt.scatter(oob[:,0], oob[:,1], s=3, alpha=0.3, c='r')
+            plt.savefig(f'../tmp/{self._name}_{self.R_i}.png')
+            plt.close()
+
+        if stats:
+            print('=== Breed: OOB stats ===',
+                 f'oob_count = {sum(self.oob_count[-1])}', 
+                 f'cov unique, count:',
+                 *np.unique(new_covariances, return_counts=True, axis=0),
+                 sep='\n')
+            
+            print('=== Breed: parent/children stats ===',
+                  'Num_children distribution:',
+                  *np.unique(np.unique(parental_idx, return_counts=True)[1], return_counts=True),
+                  sep='\n')
+
+            become_parent = np.in1d(self.indexes, parental_idx)
+            become_uniform = ~become_parent
+            was_parent = ~self.isuniform
+            was_uniform = self.isuniform
+
+            print(f'Parent points  = {become_parent.sum()}',
+                 f'Non-parent pts = {become_uniform.sum()}',
+                 f'uniform -> uniform   : {np.logical_and(was_uniform, become_uniform).sum()}',
+                 f'uniform -> parent    : {np.logical_and(was_uniform, become_parent).sum()}',
+                 f'parent  -> parent    : {np.logical_and(was_parent, become_parent).sum()}',
+                 f'parent  -> non-parent: {np.logical_and(was_parent, become_uniform).sum()}',
+                 sep='\n')
+
+        self.points = new_sample_batch
+        self.covs = new_covariances
+        self.isuniform = new_isuniform
+        self._R_step()
+        return self.points
