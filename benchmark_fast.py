@@ -151,7 +151,8 @@ if __name__ == "__main__":
                         "sigma" : 0.0,
                         "start" : 0.15,
                         "end" : 0.75,
-                        "breakpoint": int((command_args.iter // command_args.resample_period) * 0.2) # 400
+                        "breakpoint": int((command_args.iter // command_args.resample_period) * 0.2), # 400
+                        "oob_factor": 1.0
                         } 
                     }
             callbacks.append(

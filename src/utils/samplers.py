@@ -44,7 +44,7 @@ class Breed(BaseSampler):
     Methods:
     
     """
-    def __init__(self, pde, init_points, sigma=0.0, start=0.15, end=0.75, breakpoint=10):
+    def __init__(self, pde, init_points, sigma=0.0, start=0.15, end=0.75, breakpoint=10, oob_factor=1.0):
         """
         Args:
         
@@ -57,18 +57,25 @@ class Breed(BaseSampler):
             If contains any non-positive values, will be updated to "optimal" in the domain value (in dev).
             If array is given, the values are the main diagonal of cov. matrix. The size must be equal to
             number of dimensions of PDE domain. If float is given, all values of the main diagonal are equal.
-        start, end: float
+        start, end: float in [0,1]
             The first and last R value to create the R values series
-        breakpoint: int
+        breakpoint: int >= 2
             The value specifies R value scenario, how many values are 
-            linearly increasing from start to end, after which R values are constant (=end)
+            linearly increasing from start to end, after which R values are constant (=end),
+            If value is smaller than 2, it will be changed to 2 (for `start` and `end`)
+        oob_factor: float in [0,1]
+            The value specifies covariance decrease when a point sampled is out-of-bounds (oob),
+            in order to sample new point in narrower Gaussian: sigma' = sigma * oob_factor.
+            The decrease will apply until point is inside of boundary, and the new covariance value 
+            will be saved for new point (in case of sampling in it's neighbourhood).
         """
         super().__init__(pde, init_points)
         self.sigma_opt_factor = 0.0005 # magic number for sigma being 0.001 for domain length 2 as in Allen Cahn
         self._sigma_init(sigma)
         self.covs = np.full((self.size, self.dim), self.sigma) # covdiag per point!
-        self.cov_oob_factor = 0.1 # decrease covariance to sample inside domain if oob happened
-        self.Rs = np.linspace(start, end, breakpoint, endpoint=True)
+        self.check_arguments(start, end, breakpoint, oob_factor)
+        self.cov_oob_factor = oob_factor # decrease covariance to sample inside domain if oob happened
+        self.Rs = np.linspace(start, end, max(breakpoint, 2), endpoint=True)
         print("Rs: ", self.Rs)
         self.R_i = 0
         self.R = start
