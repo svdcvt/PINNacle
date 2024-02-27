@@ -61,10 +61,10 @@ class Trainer:
         data = dill.dumps((get_model, train_args))
         self.tasks.append((data, train_args))
 
-    def setup(self, filename, seed):
+    def setup(self, filename, seed, commandline):
         os.makedirs(f"runs/{self.exp_name}", exist_ok=True)
         shutil.copy(filename, f"runs/{self.exp_name}/script.py.bak")
-        json.dump({"seed": seed, "task": self.tasks}, open(f"runs/{self.exp_name}/config.json", 'w'), indent=4, default=lambda _: "...")
+        json.dump({"commandline": commandline, "seed": seed, "task": self.tasks}, open(f"runs/{self.exp_name}/config.json", 'w'), indent=4, default=lambda _: "...")
 
     def train_all(self):
         if len(self.device) > 1:

@@ -1,6 +1,7 @@
 import argparse
 import time
 import os
+import sys
 from trainer import Trainer
 
 os.environ["DDEBACKEND"] = "pytorch"
@@ -169,7 +170,8 @@ if __name__ == "__main__":
             }
         )
 
-    trainer.setup(__file__, seed)
+    commandline = " ".join(f"'{i}'" if " " in i else i for i in sys.argv)
+    trainer.setup(__file__, seed, commandline)
     trainer.set_repeat(command_args.repeat)
     trainer.train_all()
     trainer.summary()
