@@ -109,14 +109,14 @@ class Breed(BaseSampler):
     def _get_points_boundary(self, loss):
         raise NotImplementedError()
 
-    def get_points(self, residuals, boundary_only=False, plot=True, stats=False):
+    def get_points(self, residuals, boundary_only=False, plot=True, stats=True):
         if boundary_only:
             return self.get_points_boundry(residuals)
         # else into the whole domain
 
         residuals -= residuals.min()
         self.distribution = residuals / residuals.sum()
-        parental_idx = np.random.choice(np.arange(self.size), size=self.size, p=self.distribution.ravel())
+        parental_idx = np.random.choice(self.indexes, size=self.size, p=self.distribution.ravel())
 
         new_sample_batch = np.empty_like(self.points)
         new_covariances = np.full_like(self.covs, self.sigma)
@@ -153,7 +153,6 @@ class Breed(BaseSampler):
                 if parent_oob != 0:
                     self.oob_count[-1].append(parent_oob)
                 new_isuniform[i] = False
-                new_parentisu[idx] = False
             else:
                 child = self.domain.random_points(1)
                 if plot:
