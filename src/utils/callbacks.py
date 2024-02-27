@@ -297,6 +297,8 @@ class LossCallback(Callback):
                 list_to_str(loss_test),
                 list_to_str(loss_weight),
             ))
+            if self.model.lr_scheduler is not None:
+                print("Learning rate:", self.model.opt.param_groups[0]['lr'])
         if self.loss_plot:
             self.plot()
 

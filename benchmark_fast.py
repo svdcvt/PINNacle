@@ -72,6 +72,7 @@ if __name__ == "__main__":
     parser.add_argument('--hidden-layers', type=str, default="100*5")
     parser.add_argument('--loss-weight', type=str, default="")
     parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--lr-decay', action="store_true")
     parser.add_argument('--iter', type=int, default=10000)
     parser.add_argument('--log-every', type=int, default=100)
     parser.add_argument('--plot-every', type=int, default=2000)
@@ -127,9 +128,11 @@ if __name__ == "__main__":
                 opt = LR_Adaptor_NTK(opt, loss_weights, pde)
             elif command_args.method == "lbfgs":
                 opt = Adam_LBFGS(net.parameters(), switch_epoch=5000, adam_param={'lr':command_args.lr})
-
+            decay = None
+            if command_args.lr_decay:
+                decay = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, mode='min', factor=0.1, patience=10, threshold=0.0001, threshold_mode='rel')
             model = pde.create_model(net)
-            model.compile(opt, loss_weights=loss_weights)
+            model.compile(opt, loss_weights=loss_weights, decay=decay)
             return model
 
         def get_model_others():
@@ -159,7 +162,7 @@ if __name__ == "__main__":
             callbacks.append(
                     PDEPointAdaptiveResampler(
                         verbose=True,
-                        plot_verbose=False,
+                        plot_verbose=True,
                         **resampler_params)
                     )
 
