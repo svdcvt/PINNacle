@@ -78,6 +78,12 @@ if __name__ == "__main__":
     parser.add_argument('--method', choices=['gepinn', 'laaf', 'gaaf', 'multiadam', 'lra', 'ntk', 'lbfgs']) # default is None: FNN net adn Adam opt
     parser.add_argument('--resample-method', choices=['breed', 'rarg', 'rard', 'rad', 'r3', 'full']) # default is None: no resampling
     parser.add_argument('--resample-period', type=int, default=1000)
+    parser.add_argument('--breed-args', nargs=5, type=float, default=[0.0, 0.0, 1.0, 1.0, 1.0], metavar=('sigma', 'start', 'end', 'breakpoint', 'oob_factor'),
+                                        help='''Arguments for resampler method `breed`. All values must be between 0 an 1 (incl.).
+                                        `sigma` - neighbourhood width value for sampling, for value <= 0 it is calculated automatically
+                                        `start`, `end`, `breakpoint` - R-value scenario parameters. `breakpoint` is a percentage of resample
+                                                                       iterations during which R-value linearly grows from `start` to `end`
+                                        `oob_factor` - sigma will be updated as sigma*oob_factor for a point that sampled an out-of-bounds point''')
     command_args = parser.parse_args()
 
     seed = command_args.seed
@@ -140,20 +146,14 @@ if __name__ == "__main__":
 
         if command_args.resample_method is not None:
             # TODO hotfix argparse/configparse...
+            command_args.breed_args[3] = int((command_args.iter // command_args.resample_period) * command_args.breed_args[3])
             resampler_params = {
                     "method" : command_args.resample_method,
                     "period" : command_args.resample_period,
                     "density_mul" : 2,
-                    "m" : 1, # it depends on PDE
-                    #"k" : 2., are given inside callback depending on method
-                    #"c" : 0.
-                    "breed" : { # these are very specific to each PDE, but we going to use standard for all
-                        "sigma" : 0.0,
-                        "start" : 0.15,
-                        "end" : 0.75,
-                        "breakpoint": int((command_args.iter // command_args.resample_period) * 0.2), # 400
-                        "oob_factor": 1.0
-                        } 
+                    "m" : 1, # rarg/rard how many points to add
+                    "breed" : dict(zip(["sigma", "start", "end", "breakpoint", "oob_factor"],
+                                       command_args.breed_args)) 
                     }
             callbacks.append(
                     PDEPointAdaptiveResampler(
