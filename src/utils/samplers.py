@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 import numpy as np
@@ -81,6 +82,7 @@ class Breed(BaseSampler):
         self.oob_count = []
         self.isuniform = np.full((self.size,), True)
         self.indexes = np.arange(self.size)
+        self.save_path = '../tmp/'
 
     def inside(self, x):
         if hasattr(self.domain, 'inside'): # time independant
@@ -172,7 +174,10 @@ class Breed(BaseSampler):
             if len(oob):
                 oob = np.vstack(oob)
                 plt.scatter(oob[:,0], oob[:,1], s=3, alpha=0.3, c='r')
-            plt.savefig(f'../tmp/{self._name}_{self.R_i}.png')
+            path = os.path.join(self.save_path, self._name)
+            if not os.path.exists(path):
+                os.mkdir(path)
+            plt.savefig(os.path.join(path, f'{self.R_i}.png'))
             plt.close()
 
         if stats:

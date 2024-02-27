@@ -158,7 +158,8 @@ if __name__ == "__main__":
                     }
             callbacks.append(
                     PDEPointAdaptiveResampler(
-                        verbose=False,
+                        verbose=True,
+                        plot_verbose=False,
                         **resampler_params)
                     )
 

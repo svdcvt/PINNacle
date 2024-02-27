@@ -50,7 +50,7 @@ class PDEPointResampler(Callback):
 
 
 class PDEPointAdaptiveResampler(PDEPointResampler):
-    def __init__(self, method, period, pde_points=True, bc_points=False, verbose=True, **method_kwargs):
+    def __init__(self, method, period, pde_points=True, bc_points=False, verbose=True, plot_verbose=True, **method_kwargs):
         '''
         method: str, choices=['full' 'rarg' 'rard' 'rad' 'r3']
             Defines which method to use to resample points.
@@ -94,8 +94,9 @@ class PDEPointAdaptiveResampler(PDEPointResampler):
             self.breed = method_kwargs.get("breed", dict())
         elif method == 'r3':
             self.resample_count = []
-        # just for debugging
+        
         self.verbose = verbose
+        self.plot_verbose = plot_verbose
 
     def init(self):
         if self.method in ['rarg', 'rard', 'rad']:
@@ -107,16 +108,17 @@ class PDEPointAdaptiveResampler(PDEPointResampler):
             if self.method == 'rad':
                 self.m = self.model.data.train_x_all.shape[0]
         elif self.method == 'breed':
-            print(self.breed)
+            print("BREED params", self.breed)
             self.breed = Breed(self.model.pde, self.model.data.train_x_all, **self.breed)
 
-    def check(self):
-        # just debugging
-        b = (self.model.data.train_x_all.shape[0], self.model.data.num_domain, sum(self.model.data.num_bcs))
-        c = np.all(self.model.data.train_x == np.vstack([self.model.data.train_x_bc, self.model.data.train_x_all]))
-        if self.verbose:
-            print('shapes are right:', b)
-            print('train_x = [x_bc, x_all]:', c)
+    def on_train_begin(self): 
+        self.base_save_path = self.model.model_save_path
+        if self.plot_verbose:
+            self.base_save_path = os.path.join(self.model.model_save_path, "breed")
+            if not os.path.exists(self.base_save_path):
+                os.mkdir(self.base_save_path)
+            self.breed.save_path = self.base_save_path
+
 
     def resample(self):
         # for now everything is in here but TODO separate methods
@@ -183,7 +185,7 @@ class PDEPointAdaptiveResampler(PDEPointResampler):
         elif self.method == 'breed':
             X_res = self.model.data.train_x_all
             residual_error = compute_residuals(X_res)
-            self.model.data.train_x_all = self.breed.get_points(residual_error)
+            self.model.data.train_x_all = self.breed.get_points(residual_error, stats=self.verbose, plot=self.plot_verbose)
             self.model.data.resample_train_points(False, False)
 
     def on_epoch_end(self):
@@ -191,9 +193,7 @@ class PDEPointAdaptiveResampler(PDEPointResampler):
         if self.epochs_since_last_resample < self.period:
             return
         self.epochs_since_last_resample = 0
-        # self.check()
         self.resample()
-        # self.check()
 
     def on_train_end(self):
         if self.method == "breed":
@@ -210,12 +210,16 @@ class PDEPointAdaptiveResampler(PDEPointResampler):
             avg_per_parent = [np.mean(sub) for sub in self.breed.oob_count]
             sum_per_update = [np.sum(sub) for sub in self.breed.oob_count]
             block_avg = lambda x: np.round(np.array(x).reshape(min(10, len(x)), -1).mean(1), 3)
-            print("=== BREED: OOB count block-average through iterations ===",
-                 f"avg per parent   = {block_avg(avg_per_parent)}",
-                 f"total per update = {block_avg(sum_per_update)}",
-                 sep='\n')
+            if self.verbose:
+                print("=== BREED: OOB count block-average through iterations ===",
+                     f"avg per parent   = {block_avg(avg_per_parent)}",
+                     f"total per update = {block_avg(sum_per_update)}",
+                     sep='\n')
+            if self.plot_verbose:
+                pass # TODO
         elif self.method == 'r3':
-            print(f"R3: points resampled per update:", self.resample_count)
+            if self.verbose:
+                print(f"R3: points resampled per update:", self.resample_count)
 
 
 
