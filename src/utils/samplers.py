@@ -73,7 +73,6 @@ class Breed(BaseSampler):
         self.sigma_opt_factor = 0.0005 # magic number for sigma being 0.001 for domain length 2 as in Allen Cahn
         self._sigma_init(sigma)
         self.covs = np.full((self.size, self.dim), self.sigma) # covdiag per point!
-        self.check_arguments(start, end, breakpoint, oob_factor)
         self.cov_oob_factor = oob_factor # decrease covariance to sample inside domain if oob happened
         self.Rs = np.linspace(start, end, max(breakpoint, 2), endpoint=True)
         print("Rs: ", self.Rs)
@@ -137,7 +136,7 @@ class Breed(BaseSampler):
             plt.figure(figsize=(8,8))
             plt.xlim(*(self.domainbbox[:,0]+[-0.1, 0.1]))
             plt.ylim(*(self.domainbbox[:,1]+[-0.1, 0.1]))
-        oob = []
+            oob = []
         for i, idx in enumerate(parental_idx):
             # TODO fix uniform to not be sampled by chance
             # because can make uniform an import parent
@@ -170,8 +169,9 @@ class Breed(BaseSampler):
             color = np.where(new_isuniform, 'g', 'b') 
             size = np.where(new_isuniform, 3, spec ** 2.5 * 3)
             plt.scatter(new_sample_batch[:,0], new_sample_batch[:,1], s=size, alpha=0.1, c=color)
-            oob = np.vstack(oob)
-            plt.scatter(oob[:,0], oob[:,1], s=3, alpha=0.3, c='r')
+            if len(oob):
+                oob = np.vstack(oob)
+                plt.scatter(oob[:,0], oob[:,1], s=3, alpha=0.3, c='r')
             plt.savefig(f'../tmp/{self._name}_{self.R_i}.png')
             plt.close()
 
