@@ -2,8 +2,13 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.backends.backend_pdf
+import argparse
 
-name = 'grouped_results-0216'
+parser = argparse.ArgumentParser()
+parser.add_argument('tag')
+args = parser.parse_args()
+
+name = f'{args.tag}/grouped_results-{args.tag}'
 grouped_df = pd.read_csv(name + '.csv', index_col=[0,1], usecols=[0, 1, 2, 6]) # index, runtime, l2rel
 
 all_pdes = grouped_df.index.unique(level='pde')
@@ -29,7 +34,7 @@ for pp in range(0, P, RN):
     pdf.savefig(fig)    
 pdf.close()
 
-name = 'grouped_errors-0216'
+name = f'{args.tag}/grouped_errors-{args.tag}'
 error = 'l2rel'
 results_errors = np.load(name + '.npz')
 methods_order = results_errors['methods']
