@@ -15,6 +15,32 @@ from src.utils.samplers import Breed
 logger = logging.getLogger(__name__)
 
 
+class wrap_ReduceLROnPlateau(Callback):
+    def __init__(self, torchscheduler):
+        super().__init__()
+        self.scheduler = torchscheduler
+        self.epoch = 0
+        self.current_lr = lambda _: self.model.opt.param_groups[0]['lr']
+        self.history = dict(lr=[self.current_lr()], epoch=[0])
+
+    def on_train_begin(self):
+        self.scheduler = self.scheduler(self.model.opt)
+
+    def on_epoch_end(self):
+        self.epoch += 1
+        loss = sum(self.model.train_state.loss_test)
+        self.scheduler.step(loss)
+        lr = self.current_lr()
+        if lr != self.history['lr'][-1]:
+            self.history['lr'].append(lr)
+            self.history['epoch'].append(self.epoch)
+
+    def on_train_end(self):
+        print("LR-scheduler history:\n",
+            " -> ".join(f'{self.history["epoch"][i]:4d}:{self.history["lr"][i]:.2e}' for i in range(len(self.history['epoch'])))
+            )
+
+
 class PDEPointResampler(Callback):
     """Resample the training points for PDE and/or BC losses every given period.
 

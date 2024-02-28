@@ -19,7 +19,7 @@ from src.pde.poisson import Poisson2D_Classic, PoissonBoltzmann2D, Poisson3D_Com
 from src.pde.wave import Wave1D, Wave2D_Heterogeneous, Wave2D_LongTime
 from src.pde.inverse import PoissonInv, HeatInv
 from src.utils.args import parse_hidden_layers, parse_loss_weight
-from src.utils.callbacks import TesterCallback, PlotCallback, LossCallback, PDEPointAdaptiveResampler
+from src.utils.callbacks import TesterCallback, PlotCallback, LossCallback, PDEPointAdaptiveResampler, wrap_ReduceLROnPlateau
 from src.utils.rar import rar_wrapper
 
 # It is recommended not to modify this example file.
@@ -128,11 +128,9 @@ if __name__ == "__main__":
                 opt = LR_Adaptor_NTK(opt, loss_weights, pde)
             elif command_args.method == "lbfgs":
                 opt = Adam_LBFGS(net.parameters(), switch_epoch=5000, adam_param={'lr':command_args.lr})
-            decay = None
-            if command_args.lr_decay:
-                decay = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, mode='min', factor=0.1, patience=10, threshold=0.0001, threshold_mode='rel')
+
             model = pde.create_model(net)
-            model.compile(opt, loss_weights=loss_weights, decay=decay)
+            model.compile(opt, loss_weights=loss_weights)
             return model
 
         def get_model_others():
@@ -147,6 +145,10 @@ if __name__ == "__main__":
                 PlotCallback(log_every=command_args.plot_every, fast=True),
                 LossCallback(loss_plot=True, verbose=True)
                 ]
+
+        if command_args.lr_decay:
+            scheduler = lambda opt: torch.optim.lr_scheduler.ReduceLROnPlateau(opt, mode='min', factor=0.5, patience=100, threshold=0.0001, threshold_mode='rel', min_lr=1e-5)
+            callbacks.append(wrap_ReduceLROnPlateau(scheduler))
 
         if command_args.resample_method is not None:
             # TODO hotfix argparse/configparse...
