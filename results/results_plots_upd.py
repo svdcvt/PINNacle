@@ -36,7 +36,7 @@ pdf.close()
 
 name = f'{args.tag}/grouped_errors-{args.tag}'
 error = 'l2rel'
-results_errors = np.load(name + '.npz')
+results_errors = np.load(name + '.npz', allow_pickle=True)
 methods_order = results_errors['methods']
 pdes = list(results_errors.keys())[1:]
 P = len(pdes)

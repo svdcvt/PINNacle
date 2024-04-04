@@ -64,6 +64,10 @@ def process_err(root_dir, err='l2res'):
             path = os.path.join(root_dir, mdir, pde_id, 'errors.txt') 
             if os.path.isfile(path):
                 pde_errs.append(np.loadtxt(path, usecols=[err_col_id])) # 20
+            else:
+                pde_errs.append(np.full(1, None))
+        l = max(len(x) for x in pde_errs)
+        pde_errs = [x if len(x) == l else np.append(x, np.full(l-len(x), None)) for x in pde_errs]
         result_kw_arrays[pde_name] = np.stack(pde_errs, axis=0) # 7 x 20
         print(f'For {pde_name} values size: {result_kw_arrays[pde_name].shape}')
     return result_kw_arrays
