@@ -4,6 +4,7 @@ import torch
 import numpy as np
 import scipy
 import itertools
+import csv
 
 from deepxde.geometry import Hypercube, Interval
 from deepxde.callbacks import Callback, PDEPointResampler
@@ -20,11 +21,11 @@ class wrap_ReduceLROnPlateau(Callback):
         super().__init__()
         self.scheduler = torchscheduler
         self.epoch = 0
-        self.current_lr = lambda _: self.model.opt.param_groups[0]['lr']
-        self.history = dict(lr=[self.current_lr()], epoch=[0])
+        self.current_lr = lambda : self.model.opt.param_groups[0]['lr']
 
     def on_train_begin(self):
         self.scheduler = self.scheduler(self.model.opt)
+        self.history = dict(lr=[self.current_lr()], epoch=[0])
 
     def on_epoch_end(self):
         self.epoch += 1
@@ -233,10 +234,13 @@ class PDEPointAdaptiveResampler(PDEPointResampler):
             in second update there was 1 parent with 1 resample,
             in third update there were no resamples
             '''
-            avg_per_parent = [np.mean(sub) for sub in self.breed.oob_count]
-            sum_per_update = [np.sum(sub) for sub in self.breed.oob_count]
-            block_avg = lambda x: np.round(np.array(x).reshape(min(10, len(x)), -1).mean(1), 3)
+            with open(os.path.join(self.base_save_path, 'breed_oob_count.csv'), 'w') as f:
+                wr = csv.writer(f)
+                wr.writerows(self.breed.oob_count)
             if self.verbose:
+                avg_per_parent = [np.mean(sub) for sub in self.breed.oob_count]
+                sum_per_update = [np.sum(sub) for sub in self.breed.oob_count]
+                block_avg = lambda x: np.round(np.array(x).reshape(min(10, len(x)), -1).mean(1), 3)
                 print("=== BREED: OOB count block-average through iterations ===",
                      f"avg per parent   = {block_avg(avg_per_parent)}",
                      f"total per update = {block_avg(sum_per_update)}",

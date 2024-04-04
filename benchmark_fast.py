@@ -88,6 +88,7 @@ if __name__ == "__main__":
                                         `oob_factor` - sigma will be updated as sigma*oob_factor for a point that sampled an out-of-bounds point''')
     command_args = parser.parse_args()
 
+    command_args.breed_args[3] = int((command_args.iter // command_args.resample_period) * command_args.breed_args[3])
     seed = command_args.seed
     if seed is not None:
         dde.config.set_random_seed(seed)
@@ -152,7 +153,6 @@ if __name__ == "__main__":
 
         if command_args.resample_method is not None:
             # TODO hotfix argparse/configparse...
-            command_args.breed_args[3] = int((command_args.iter // command_args.resample_period) * command_args.breed_args[3])
             resampler_params = {
                     "method" : command_args.resample_method,
                     "period" : command_args.resample_period,
@@ -163,8 +163,8 @@ if __name__ == "__main__":
                     }
             callbacks.append(
                     PDEPointAdaptiveResampler(
-                        verbose=True,
-                        plot_verbose=True,
+                        verbose=False,
+                        plot_verbose=False,
                         **resampler_params)
                     )
 
