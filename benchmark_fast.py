@@ -11,6 +11,7 @@ import torch
 import deepxde as dde
 from src.model.laaf import DNN_GAAF, DNN_LAAF
 from src.optimizer import MultiAdam, LR_Adaptor, LR_Adaptor_NTK, Adam_LBFGS
+from src.pde.ac import AllenCahn1D
 from src.pde.burgers import Burgers1D, Burgers2D
 from src.pde.chaotic import GrayScottEquation, KuramotoSivashinskyEquation
 from src.pde.heat import Heat2D_VaryingCoef, Heat2D_Multiscale, Heat2D_ComplexGeometry, Heat2D_LongTime, HeatND
@@ -33,11 +34,12 @@ pde_list = \
     [KuramotoSivashinskyEquation, GrayScottEquation] + \
     [PoissonND, HeatND]
 
-# pde_list = [Burgers1D, Poisson2D_Classic, Wave1D, PoissonBoltzmann2D] # these are the fastest pde to process
+pde_list = [Burgers1D, Poisson2D_Classic, Wave1D, PoissonBoltzmann2D] # these are the fastest pde to process
 
-# pde_list = [KuramotoSivashinskyEquation, GrayScottEquation]
+# pde_list = [Burgers1D, Poisson2D_Classic, NS2D_LidDriven, Wave1D, Wave2D_LongTime, GrayScottEquation, Heat2D_ComplexGeometry, Poisson2D_ManyArea]
 
-pde_list = [Burgers1D, Wave1D]
+# pde_list = [Burgers1D, Wave1D]
+#pde_list = [AllenCahn1D]
 
 # pde_list += \
 #     [(Burgers2D, {"datapath": "ref/burgers2d_1.dat", "icpath": ("ref/burgers2d_init_u_1.dat", "ref/burgers2d_init_v_1.dat")})] + \

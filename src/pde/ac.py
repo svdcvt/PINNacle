@@ -1,6 +1,6 @@
 import numpy as np
 import deepxde as dde
-import scipy
+import scipy.io as scio
 
 from . import baseclass
 
@@ -50,5 +50,5 @@ class AllenCahn1D(baseclass.BaseTimePDE):
         self.training_points()  # default
 
     def load_ref_data(self, datapath):
-        data = scipy.io.loadmat(datapath)
+        data = scio.loadmat(datapath)
         self.ref_data = np.hstack([data['x'].T, data['uu']]).astype(np.float32) # X,T = 512, 1+201 and initially float64
