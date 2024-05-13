@@ -51,4 +51,7 @@ class AllenCahn1D(baseclass.BaseTimePDE):
 
     def load_ref_data(self, datapath):
         data = scio.loadmat(datapath)
-        self.ref_data = np.hstack([data['x'].T, data['uu']]).astype(np.float32) # X,T = 512, 1+201 and initially float64
+        XX, TT = np.meshgrid(data['x'], data['tt'])
+        ref_inp = np.stack([XX[:,:,None], TT[:,:,None]], -1).reshape(-1, 2)
+        ref_out = data['uu'].T.reshape(-1, 1)
+        self.ref_data = np.hstack([ref_inp, ref_out]).astype(np.float32)

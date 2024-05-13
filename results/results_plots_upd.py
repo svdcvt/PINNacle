@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import matplotlib.backends.backend_pdf
 import argparse
 
+from cycler import cycler
+
 parser = argparse.ArgumentParser()
 parser.add_argument('tag')
 parser.add_argument('--range', nargs=3, default=[0, -1, 1], type=int)
@@ -17,10 +19,14 @@ all_methods =  grouped_df.index.unique(level='method')
 M = len(all_methods)
 P = len(all_pdes)
 
+cm = matplotlib.cm.get_cmap('gist_ncar')
+custom_cycler = lambda n: cycler(color=[cm(x) for x in np.linspace(0, 1, n+1)])
+
 pdf = matplotlib.backends.backend_pdf.PdfPages(name + '.pdf')
 # bar-plots of runtime and l2rel (last epoch)
 K = grouped_df.shape[1]
-RN = 4 # maximum number of plots in a row
+RN = min(3, P) # maximum number of plots in a row
+axx = lambda a, b: axes[a, b] if RN>1 else axes[a]
 for pp in range(0, P, RN):
     fig, axes = plt.subplots(K, RN, figsize=(5*RN + RN, 3 * K + K), sharex=True)
     for k, figname in enumerate(grouped_df.columns):
@@ -28,11 +34,12 @@ for pp in range(0, P, RN):
             res = grouped_df.iloc[:, k]
             res = res.loc[pde]
             methods = [m for m in all_methods if m in res.index]
-            axes[0,i].set_title(pde)
-            axes[k,i].bar(methods, res.loc[methods])
-            axes[1,i].set_yscale('log')
-            axes[k,0].set_ylabel(f"{'log-' * k}{figname}")
-    pdf.savefig(fig)    
+            axx(0,i).set_title(pde)
+            axx(k,i).bar(methods, res.loc[methods])
+            axx(1,i).set_yscale('log')
+            axx(1,i).xaxis.set_tick_params(rotation=90)
+        axx(k,0).set_ylabel(f"{'log-' * k}{figname}")                
+    pdf.savefig(fig, bbox_inches="tight")    
 pdf.close()
 
 name = f'{args.tag}/grouped_errors-{args.tag}'
@@ -44,20 +51,24 @@ P = len(pdes)
 
 # line plots of l2rel across iterations for each pde
 pdf = matplotlib.backends.backend_pdf.PdfPages(name + '.pdf')
-RN = 4 # maximum number of plots in a row
+RN = min(3, P) # maximum number of plots in a row
+axx = lambda a: axes[a] if RN>1 else axes
 for pp in range(0, P, RN):
-    fig, axes = plt.subplots(1, RN, figsize=(5 * RN + RN, 5))
+    fig, axes = plt.subplots(1, RN, figsize=(6 * RN + RN, 5))
     for i, pde in enumerate(pdes[pp: pp + RN]):
-        axes[i].set_title(pde)
+        axx(i).set_title(pde)
         res_pde = results_errors[pde]
+        axx(i).set_prop_cycle(custom_cycler(len(res_pde)))
         for j in range(len(res_pde)):
             end = len(res_pde[j]) if args.range[1] == -1 else args.range[1]
-            axes[i].plot(res_pde[j][slice(*args.range)], label=methods_order[j])
-            axes[i].set_xticks(np.arange(args.range[0], end + 1, (end-args.range[0]) // 10, dtype=int))
-        axes[i].set_yscale('log')
-        axes[0].set_ylabel(error)
-    axes[i].legend()
-    pdf.savefig(fig)
+            xt = np.arange(args.range[0], end + 1, dtype=int)
+            axx(i).plot(xt[:-2], res_pde[j][slice(*args.range)], label=methods_order[j])
+            print(j, methods_order[j])
+            axx(i).set_xticks(xt[::(end-args.range[0]) // 10])
+        axx(i).set_yscale('log')
+        axx(0).set_ylabel(error)
+    axx(i).legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    pdf.savefig(fig, bbox_inches="tight")
 pdf.close()
 
 name = f'{args.tag}/grouped_loss-{args.tag}'
@@ -68,19 +79,22 @@ P = len(pdes)
 
 # line plots of l2rel across iterations for each pde
 pdf = matplotlib.backends.backend_pdf.PdfPages(name + '.pdf')
-RN = 4 # maximum number of plots in a row
+RN = min(3, P) # maximum number of plots in a row
+axx = lambda a: axes[a] if RN>1 else axes
 for pp in range(0, P, RN):
-    fig, axes = plt.subplots(1, RN, figsize=(5 * RN + RN, 5))
+    fig, axes = plt.subplots(1, RN, figsize=(6 * RN + RN, 5))
     for i, pde in enumerate(pdes[pp: pp + RN]):
-        axes[i].set_title(pde)
+        axx(i).set_title(pde)
         res_pde = results_loss[pde]
+        axx(i).set_prop_cycle(custom_cycler(len(res_pde)))
         for j in range(len(res_pde)):
             end = len(res_pde[j][0]) if args.range[1] == -1 else args.range[1]
-            p=axes[i].plot(res_pde[j][0][slice(*args.range)], label=methods_order[j])
-            axes[i].plot(res_pde[j][1][slice(*args.range)], linestyle='--', c=p[0].get_color())
-            axes[i].set_xticks(np.arange(args.range[0], end + 1, (end-args.range[0]) // 10, dtype=int))
-        axes[i].set_yscale('log')
-        axes[0].set_ylabel(error)
-    axes[i].legend()
-    pdf.savefig(fig)
+            xt = np.arange(args.range[0], end + 1, dtype=int)
+            p=axx(i).plot(xt[:-2], res_pde[j][0][slice(*args.range)], label=methods_order[j])
+            axx(i).plot(xt[:-2], res_pde[j][1][slice(*args.range)], linestyle='--', c=p[0].get_color())
+            axx(i).set_xticks(xt[::(end-args.range[0]) // 10])
+        axx(i).set_yscale('log')
+        axx(0).set_ylabel('full loss')
+    axx(i).legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    pdf.savefig(fig, bbox_inches="tight")
 pdf.close()

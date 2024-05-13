@@ -28,7 +28,10 @@ if __name__ == "__main__":
     parser.add_argument('--loss-weight', type=str, default="")
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--lr-decay', action="store_true")
+    parser.add_argument('--lr-step', nargs=2, type=float, default=[None, None])
     parser.add_argument('--iter', type=int, default=10000)
+    parser.add_argument('--small-set', action="store_true")
+    parser.add_argument('--domain-boundary', nargs=3, type=int, default=[819, 204, 204])
     parser.add_argument('--log-every', type=int, default=100)
     parser.add_argument('--plot-every', type=int, default=2000)
     parser.add_argument('--repeat', type=int, default=1)
@@ -87,8 +90,14 @@ if __name__ == "__main__":
             elif command_args.method == "ntk":
                 opt = LR_Adaptor_NTK(opt, loss_weights, pde)
 
+            if command_args.small_set:
+                pde.training_points(*command_args.domain_boundary)
             model = pde.create_model(net)
-            model.compile(opt, loss_weights=loss_weights)
+            if None not in command_args.lr_step:
+                scheduler = ['step'] + command_args.lr_step
+            else:
+                scheduler = None
+            model.compile(opt, loss_weights=loss_weights, decay=scheduler)
             return model
 
         def get_model_others():
@@ -107,6 +116,7 @@ if __name__ == "__main__":
         if command_args.lr_decay:
             scheduler = lambda opt: torch.optim.lr_scheduler.ReduceLROnPlateau(opt, mode='min', factor=0.5, patience=100, threshold=0.0001, threshold_mode='rel', min_lr=1e-5)
             callbacks.append(wrap_ReduceLROnPlateau(scheduler))
+
 
         if command_args.resample_method is not None:
             # TODO hotfix argparse/configparse...

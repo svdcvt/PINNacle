@@ -4,13 +4,15 @@ import numpy as np
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument('substring')
-parser.add_argument('tag')
+parser.add_argument('substring', help='substring to include')
+parser.add_argument('nosubstring', help='substring to exclude, set `none` is nothing to exclude')
+parser.add_argument('tag', help='name for the subdirectory')
 parser.add_argument('-i', '--root-directory', default='../runs')
 parser.add_argument('-o', '--where', default='./')
 args = parser.parse_args()
 
 substring = args.substring
+nosubstring = args.nosubstring if args.nosubstring != 'none' else None
 root_directory = args.root_directory
 tag = args.tag
 where = args.where
@@ -24,7 +26,7 @@ errors_cols = '# epochs, maes, mses, mxes, l1res, l2res, crmses, frmses(low, mid
 def process_csv(root_dir):
     dfs = []  
     for subdir in os.listdir(root_dir):
-        if substring not in subdir:
+        if substring not in subdir or (nosubstring is not None and nosubstring in subdir):
             continue
         csv_path = os.path.join(root_dir, subdir, 'result.csv')
         if os.path.isfile(csv_path):
@@ -37,7 +39,9 @@ def process_csv(root_dir):
 
 def process_err(root_dir, err='l2res'):
     err_col_id = errors_cols.index(err)
-    method_dirs = [subdir for subdir in os.listdir(root_dir) if substring in subdir]
+    method_dirs = sorted([subdir for subdir in os.listdir(root_dir) 
+                          if substring in subdir and (nosubstring is None or nosubstring not in subdir)],
+                         key=lambda x: x.split('-')[-1])
     print("Directories to process:\n", '\n '.join(method_dirs))
 
     pde_id_name = []
@@ -73,7 +77,9 @@ def process_err(root_dir, err='l2res'):
     return result_kw_arrays
 
 def process_loss(root_dir):
-    method_dirs = [subdir for subdir in os.listdir(root_dir) if substring in subdir]
+    method_dirs = sorted([subdir for subdir in os.listdir(root_dir) 
+                          if substring in subdir and (nosubstring is None or nosubstring not in subdir)],
+                         key=lambda x: x.split('-')[-1])
     print("Directories to process:\n", '\n '.join(method_dirs))
 
     pde_id_name = []

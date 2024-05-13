@@ -136,7 +136,7 @@ class PDEPointAdaptiveResampler(PDEPointResampler):
                 self.m = self.model.data.train_x_all.shape[0]
         elif self.method == 'breed':
             print("BREED params", self.breed)
-            self.breed = Breed(self.model.pde, self.model.data.train_x_all, **self.breed)
+            self.breed = Breed(self.model.pde, self.model.data.train_x_all[self.model.pde.num_boundary_points:], **self.breed)
 
     def on_train_begin(self): 
         self.base_save_path = self.model.model_save_path
@@ -210,9 +210,9 @@ class PDEPointAdaptiveResampler(PDEPointResampler):
             # this will update train_x and train_y, but no touching train_x_bc
             self.model.data.resample_train_points(False, False)
         elif self.method == 'breed':
-            X_res = self.model.data.train_x_all
+            X_res = self.model.data.train_x_all[self.model.pde.num_boundary_points:]
             residual_error = compute_residuals(X_res)
-            self.model.data.train_x_all = self.breed.get_points(residual_error, stats=self.verbose, plot=self.plot_verbose)
+            self.model.data.train_x_all[self.model.pde.num_boundary_points:] = self.breed.get_points(residual_error, stats=self.verbose, plot=self.plot_verbose)
             self.model.data.resample_train_points(False, False)
 
     def on_epoch_end(self):
