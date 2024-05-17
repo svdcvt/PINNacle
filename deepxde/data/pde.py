@@ -1,6 +1,7 @@
 import numpy as np
 
 from .data import Data
+from .sampler import BatchSampler
 from .. import backend as bkd
 from .. import config
 from ..backend import backend_name
@@ -111,6 +112,7 @@ class PDE(Data):
         self.test_x, self.test_y = None, None
         self.train_aux_vars, self.test_aux_vars = None, None
 
+        self.train_sampler = BatchSampler(self.num_boundary, shuffle=True)
         self.train_next_batch()
         self.test()
 
@@ -169,6 +171,17 @@ class PDE(Data):
                 config.real(np)
             )
         return self.train_x, self.train_y, self.train_aux_vars
+
+    def train_next_batch_mod(self, batch_size=None):
+        if batch_size is None:
+            return *self.train_next_batch(batch_size)
+
+        indices = self.train_sampler.get_next(self.batch_size)
+        # train_x_batch is BC_all [bc loss] + BC_all [pde loss] + domain_batch [pde loss]
+        # train_x_batch = np.vstack((self.train_x[:self.num_boundary * 2], self.train_x_all[self.num_boundary:][indices]))
+        # train_x_batch is BC_all [bc loss] + domain_batch [pde_loss]
+        train_x_batch = np.vstack((self.train_x[:self.num_boundary], self.train_x_all[self.num_boundary:][indices]))
+        return train_x_batch, self.train_y, self.train_aux_vars
 
     @run_if_all_none("test_x", "test_y", "test_aux_vars")
     def test(self):
